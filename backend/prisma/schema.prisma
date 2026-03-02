@@ -1,0 +1,206 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum ShiftStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  PENDING_SWAP
+}
+
+enum SwapType {
+  SWAP
+  DROP
+}
+
+enum SwapStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+model User {
+  id                  String            @id @default(uuid())
+  email               String            @unique
+  password            String
+  firstName           String
+  lastName            String
+  role                Role
+  phone               String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  managerLocations    LocationManager[]
+  certifications      Certification[]
+  skills              UserSkill[]
+  availability        Availability[]
+  exceptions          Exception[]
+  shifts              ShiftAssignment[]
+  swapRequests        SwapRequest[]     @relation("SwapRequestRequester")
+  swapTargets         SwapRequest[]     @relation("SwapRequestTarget")
+  auditLogs           AuditLog[]
+}
+
+model Location {
+  id               String            @id @default(uuid())
+  name             String
+  address          String
+  timezone         String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  managers         LocationManager[]
+  shifts           Shift[]
+  certifications   Certification[]
+  availability     Availability[]
+}
+
+model Skill {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  users       UserSkill[]
+  shifts      Shift[]
+}
+
+model Certification {
+  id          String      @id @default(uuid())
+  userId      String
+  locationId  String
+  revokedAt   DateTime?
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location    Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+  @@index([locationId, userId, revokedAt])
+}
+
+model UserSkill {
+  userId      String
+  skillId     String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill       Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([userId, skillId])
+}
+
+model Availability {
+  id          String      @id @default(uuid())
+  userId      String
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  locationId  String?
+  isRecurring Boolean     @default(true)
+  validFrom   DateTime
+  validTo     DateTime?
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location    Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, dayOfWeek])
+  @@index([locationId])
+}
+
+model Exception {
+  id          String      @id @default(uuid())
+  userId      String
+  date        DateTime
+  startTime   String?
+  endTime     String?
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model Shift {
+  id              String            @id @default(uuid())
+  locationId      String
+  startTime       DateTime
+  endTime         DateTime
+  requiredSkillId String
+  headcountNeeded Int               @default(1)
+  status          ShiftStatus       @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  location        Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  requiredSkill   Skill             @relation(fields: [requiredSkillId], references: [id], onDelete: Restrict)
+  assignments     ShiftAssignment[]
+  swapRequests    SwapRequest[]
+
+  @@index([locationId, startTime])
+}
+
+model ShiftAssignment {
+  id          String            @id @default(uuid())
+  shiftId     String
+  userId      String
+  status      AssignmentStatus  @default(ASSIGNED)
+  shift       Shift             @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, userId])
+  @@index([userId, shiftId])
+}
+
+model SwapRequest {
+  id               String      @id @default(uuid())
+  shiftId          String
+  requestingUserId String
+  targetUserId     String?
+  type             SwapType
+  status           SwapStatus  @default(PENDING)
+  expiresAt        DateTime
+  createdAt        DateTime    @default(now())
+  shift            Shift       @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestingUser   User        @relation("SwapRequestRequester", fields: [requestingUserId], references: [id], onDelete: Cascade)
+  targetUser       User?       @relation("SwapRequestTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+
+  @@index([shiftId, status])
+  @@index([requestingUserId, status])
+}
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String
+  beforeState Json?
+  afterState  Json?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId, createdAt])
+}
+
+model LocationManager {
+  id          String    @id @default(uuid())
+  locationId  String
+  userId      String
+  createdAt   DateTime  @default(now())
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, userId])
+  @@index([userId, locationId])
+}
