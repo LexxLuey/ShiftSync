@@ -13,6 +13,7 @@ type UseSocketOptions = {
 export default function useSocket(options: UseSocketOptions = {}) {
     const { enabled = true, token } = options
     const socketRef = useRef<any>(null)
+    const socketBaseUrl = appConfig.socketUrl || appConfig.apiBaseUrl
 
     const isSocketConnected = useAppRealtimeStore(
         (state) => state.isSocketConnected,
@@ -24,11 +25,11 @@ export default function useSocket(options: UseSocketOptions = {}) {
     const incrementUnread = useAppRealtimeStore((state) => state.incrementUnread)
 
     useEffect(() => {
-        if (!enabled || !appConfig.apiBaseUrl) {
+        if (!enabled || !socketBaseUrl) {
             return
         }
 
-        const socket = io(appConfig.apiBaseUrl, {
+        const socket = io(socketBaseUrl, {
             transports: ['websocket'],
             auth: token ? { token } : undefined,
         })
@@ -63,7 +64,14 @@ export default function useSocket(options: UseSocketOptions = {}) {
             socketRef.current = null
             setSocketConnected(false)
         }
-    }, [enabled, token, setSocketConnected, setLastEvent, incrementUnread])
+    }, [
+        enabled,
+        token,
+        socketBaseUrl,
+        setSocketConnected,
+        setLastEvent,
+        incrementUnread,
+    ])
 
     return {
         socket: socketRef.current,

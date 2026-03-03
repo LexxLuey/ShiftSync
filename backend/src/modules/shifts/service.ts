@@ -1,6 +1,12 @@
 import prismaClient from '../../lib/db/prisma.js';
 import { ValidationError, NotFoundError, ConflictError } from '../../lib/errors/customErrors.js';
 import { logAction } from '../audit/service.js';
+import {
+  emitShiftCreated,
+  emitShiftPublished,
+  emitShiftUpdated,
+} from '../../lib/events/index.js';
+import { createNotification } from '../notifications/service.js';
 import type { CreateShiftPayload, UpdateShiftPayload } from './validation.js';
 
 export const createShift = async (
@@ -85,6 +91,8 @@ export const createShift = async (
         { id: shift.id, locationId, startTime, endTime, requiredSkillId: payload.requiredSkillId, headcountNeeded: payload.headcountNeeded }
       );
     }
+
+    emitShiftCreated(shift);
 
     return shift;
   });
@@ -260,6 +268,9 @@ export const updateShift = async (
       );
     }
 
+    const affectedUserIds = updated.assignments.map((assignment) => assignment.user.id);
+    emitShiftUpdated(updated, affectedUserIds);
+
     return updated;
   });
 };
@@ -369,6 +380,19 @@ export const publishShift = async (shiftId: string, userId?: string) => {
         { status: published.status, publishedAt: published.publishedAt }
       );
     }
+
+    emitShiftPublished(published);
+
+    const notificationMessage = `Shift ${published.id} was published`;
+    published.assignments.forEach((assignment) => {
+      createNotification({
+        userId: assignment.user.id,
+        type: 'shift:published',
+        message: notificationMessage,
+        relatedEntityId: published.id,
+        relatedEntityType: 'SHIFT',
+      });
+    });
 
     return {
       ...published,

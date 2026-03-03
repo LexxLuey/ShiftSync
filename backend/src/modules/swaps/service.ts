@@ -1,6 +1,8 @@
 import prismaClient from '../../lib/db/prisma.js';
 import { NotFoundError, ValidationError, ForbiddenError } from '../../lib/errors/customErrors.js'
 import { isUserAvailableAtTime } from '../availability/service.js'
+import { emitSwapCreated, emitSwapUpdated } from '../../lib/events/index.js';
+import { createNotification } from '../notifications/service.js';
 import type { CreateSwapRequestPayload, ApproveSwapRequestPayload } from './validation.js'
 
 export interface Violation {
@@ -209,8 +211,17 @@ export const createSwapRequest = async (
         },
     })
 
-    // Phase 5: Emit socket event swap:created
-    // Phase 5: Send notification to targetUser if SWAP type
+    emitSwapCreated(swapRequest);
+
+    if (swapRequest.targetUserId) {
+        createNotification({
+            userId: swapRequest.targetUserId,
+            type: 'swap:created',
+            message: `${swapRequest.requestingUser.firstName} requested a shift swap with you`,
+            relatedEntityId: swapRequest.id,
+            relatedEntityType: 'SWAP_REQUEST',
+        });
+    }
 
     return swapRequest
 }
@@ -264,8 +275,7 @@ export const acceptSwapRequest = async (
         },
     })
 
-    // Phase 5: Emit socket event
-    // Phase 5: Notify managers
+    emitSwapUpdated(updated);
 
     return updated
 }
@@ -302,8 +312,27 @@ export const rejectSwapRequest = async (swapRequestId: string, userId: string) =
         },
     })
 
-    // Phase 5: Emit socket event
-    // Phase 5: Notify involved parties
+    emitSwapUpdated(updated);
+
+    if (updated.requestingUserId !== userId) {
+        createNotification({
+            userId: updated.requestingUserId,
+            type: 'swap:rejected',
+            message: 'Your swap request was rejected.',
+            relatedEntityId: updated.id,
+            relatedEntityType: 'SWAP_REQUEST',
+        });
+    }
+
+    if (updated.targetUserId && updated.targetUserId !== userId) {
+        createNotification({
+            userId: updated.targetUserId,
+            type: 'swap:rejected',
+            message: 'A swap request involving you was rejected.',
+            relatedEntityId: updated.id,
+            relatedEntityType: 'SWAP_REQUEST',
+        });
+    }
 
     return updated
 }
@@ -403,8 +432,27 @@ export const approveSwapRequest = async (
         },
     })
 
-    // Phase 5: Emit socket event
-    // Phase 5: Create audit log
+    if (updated) {
+        emitSwapUpdated(updated);
+
+        createNotification({
+            userId: updated.requestingUserId,
+            type: 'swap:approved',
+            message: 'Your swap request was approved.',
+            relatedEntityId: updated.id,
+            relatedEntityType: 'SWAP_REQUEST',
+        });
+
+        if (updated.targetUserId) {
+            createNotification({
+                userId: updated.targetUserId,
+                type: 'swap:approved',
+                message: 'A swap request involving you was approved.',
+                relatedEntityId: updated.id,
+                relatedEntityType: 'SWAP_REQUEST',
+            });
+        }
+    }
 
     return updated
 }
@@ -441,8 +489,25 @@ export const cancelSwapRequest = async (swapRequestId: string, requesterId: stri
         },
     })
 
-    // Phase 5: Emit socket event
-    // Phase 5: Notify parties
+    emitSwapUpdated(updated);
+
+    createNotification({
+        userId: updated.requestingUserId,
+        type: 'swap:rejected',
+        message: 'You cancelled your swap request.',
+        relatedEntityId: updated.id,
+        relatedEntityType: 'SWAP_REQUEST',
+    });
+
+    if (updated.targetUserId) {
+        createNotification({
+            userId: updated.targetUserId,
+            type: 'swap:rejected',
+            message: 'A pending swap request involving you was cancelled.',
+            relatedEntityId: updated.id,
+            relatedEntityType: 'SWAP_REQUEST',
+        });
+    }
 
     return updated
 }

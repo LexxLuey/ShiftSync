@@ -8,6 +8,7 @@ import swapsRouter from './modules/swaps/routes.js';
 import availabilityRouter from './modules/availability/routes.js';
 import assignmentsRouter from './modules/assignments/routes.js';
 import reportsRouter from './modules/reports/routes.js';
+import notificationsRouter from './modules/notifications/routes.js';
 // If audit has routes, import here (middleware is not a router)
 
 const mainRouter = Router();
@@ -24,6 +25,7 @@ mainRouter.use('/shifts', swapsRouter);
 mainRouter.use('/swap-requests', swapsRouter);
 mainRouter.use('/reports', reportsRouter);
 mainRouter.use('/shifts', reportsRouter);
+mainRouter.use('/notifications', notificationsRouter);
 // Add more as needed
 
 export default mainRouter;
