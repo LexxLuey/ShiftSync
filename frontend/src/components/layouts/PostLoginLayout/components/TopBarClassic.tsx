@@ -2,6 +2,7 @@
 
 import Header from '@/components/template/Header'
 import UserProfileDropdown from '@/components//template/UserProfileDropdown'
+import NotificationBell from '@/components/shared/NotificationBell'
 import HeaderLogo from '@/components/template/HeaderLogo'
 import MobileNav from '@/components/template/MobileNav'
 import HorizontalNav from '@/components/template/HorizontalNav'
@@ -29,6 +30,7 @@ const TopBarClassic = ({ children }: CommonProps) => {
                         headerMiddle={<HorizontalNav />}
                         headerEnd={
                             <>
+                                <NotificationBell />
                                 <UserProfileDropdown hoverable={false} />
                             </>
                         }

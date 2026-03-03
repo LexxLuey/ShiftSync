@@ -1,5 +1,7 @@
 import 'dotenv/config';
+import { createServer } from 'http';
 import expressApp from './app.js';
+import { initializeSocket } from './lib/socket/index.js';
 import winston from 'winston';
 
 const logger = winston.createLogger({
@@ -15,6 +17,11 @@ const logger = winston.createLogger({
 
 const portNumber = process.env.PORT || 4000;
 
-expressApp.listen(portNumber, () => {
+const httpServer = createServer(expressApp);
+
+// Initialize Socket.io
+initializeSocket(httpServer);
+
+httpServer.listen(portNumber, () => {
     logger.info(`Server running on port ${portNumber}`);
 });

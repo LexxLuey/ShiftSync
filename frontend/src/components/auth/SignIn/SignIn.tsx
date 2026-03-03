@@ -63,19 +63,21 @@ const SignIn = ({
                 }
                 onSignIn={onSignIn}
             />
-            <div className="mt-8">
-                <div className="flex items-center gap-2 mb-6">
-                    <div className="border-t border-gray-200 dark:border-gray-800 flex-1 mt-[1px]" />
-                    <p className="font-semibold heading-text">
-                        or countinue with
-                    </p>
-                    <div className="border-t border-gray-200 dark:border-gray-800 flex-1 mt-[1px]" />
+            {onOauthSignIn ? (
+                <div className="mt-8">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="border-t border-gray-200 dark:border-gray-800 flex-1 mt-[1px]" />
+                        <p className="font-semibold heading-text">
+                            or continue with
+                        </p>
+                        <div className="border-t border-gray-200 dark:border-gray-800 flex-1 mt-[1px]" />
+                    </div>
+                    <OauthSignIn
+                        setMessage={setMessage}
+                        onOauthSignIn={onOauthSignIn}
+                    />
                 </div>
-                <OauthSignIn
-                    setMessage={setMessage}
-                    onOauthSignIn={onOauthSignIn}
-                />
-            </div>
+            ) : null}
             <div>
                 <div className="mt-6 text-center">
                     <span>{`Don't have an account yet?`} </span>

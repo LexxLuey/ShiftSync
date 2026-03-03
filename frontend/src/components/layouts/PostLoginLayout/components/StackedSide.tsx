@@ -4,6 +4,7 @@ import StackedSideNav from '@/components/template/StackedSideNav'
 import Header from '@/components/template/Header'
 import MobileNav from '@/components/template/MobileNav'
 import UserProfileDropdown from '@/components//template/UserProfileDropdown'
+import NotificationBell from '@/components/shared/NotificationBell'
 import LayoutBase from '@/components//template/LayoutBase'
 import { LAYOUT_STACKED_SIDE } from '@/constants/theme.constant'
 import type { CommonProps } from '@/@types/common'
@@ -22,6 +23,7 @@ const StackedSide = ({ children }: CommonProps) => {
                         headerStart={<MobileNav />}
                         headerEnd={
                             <>
+                                <NotificationBell />
                                 <UserProfileDropdown hoverable={false} />
                             </>
                         }

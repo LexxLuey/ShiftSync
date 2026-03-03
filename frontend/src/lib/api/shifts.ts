@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 import type {
     CreateShiftPayload,
+    UpdateShiftPayload,
     GetShiftsByLocationParams,
     Shift,
 } from './types'
@@ -28,6 +29,12 @@ export const shiftService = {
     },
     getShiftById(id: string) {
         return apiClient.get<Shift>(`/shifts/${id}`)
+    },
+    updateShift(id: string, payload: UpdateShiftPayload) {
+        return apiClient.put<Shift, UpdateShiftPayload>(`/shifts/${id}`, payload)
+    },
+    deleteShift(id: string) {
+        return apiClient.del<Shift>(`/shifts/${id}`)
     },
     publishShift(id: string) {
         return apiClient.post<Shift, Record<string, never>>(

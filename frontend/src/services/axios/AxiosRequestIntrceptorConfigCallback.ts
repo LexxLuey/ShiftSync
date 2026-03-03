@@ -1,4 +1,5 @@
 import type { InternalAxiosRequestConfig } from 'axios'
+import { ACCESS_TOKEN_STORAGE_KEY } from '@/lib/auth/constants'
 
 const AxiosRequestIntrceptorConfigCallback = (
     config: InternalAxiosRequestConfig,
@@ -7,9 +8,7 @@ const AxiosRequestIntrceptorConfigCallback = (
         return config
     }
 
-    const token =
-        window.localStorage.getItem('accessToken') ||
-        window.localStorage.getItem('token')
+    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
 
     if (token && !config.headers.Authorization) {
         config.headers.Authorization = `Bearer ${token}`
