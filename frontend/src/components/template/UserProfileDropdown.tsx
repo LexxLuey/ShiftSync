@@ -4,8 +4,9 @@ import Avatar from '@/components/ui/Avatar'
 import Dropdown from '@/components/ui/Dropdown'
 import withHeaderItem from '@/utils/hoc/withHeaderItem'
 import Link from 'next/link'
-import signOut from '@/server/actions/auth/handleSignOut'
 import useCurrentSession from '@/utils/hooks/useCurrentSession'
+import { useAuth } from '@/context/AuthContext'
+import { useRouter } from 'next/navigation'
 import { PiUserDuotone, PiSignOutDuotone } from 'react-icons/pi'
 
 import type { JSX } from 'react'
@@ -20,9 +21,12 @@ const dropdownItemList: DropdownList[] = []
 
 const _UserDropdown = () => {
     const { session } = useCurrentSession()
+    const { logout } = useAuth()
+    const router = useRouter()
 
     const handleSignOut = async () => {
-        await signOut()
+        logout()
+        router.replace('/sign-in')
     }
 
     const avatarProps = {

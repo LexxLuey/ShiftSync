@@ -1,11 +1,28 @@
-import { useContext } from 'react'
-import SessionContext from '@/components/auth/AuthProvider/SessionContext'
+import { useMemo } from 'react'
+import { useAuth } from '@/context/AuthContext'
+import type { AuthSession } from '@/lib/auth/types'
 
 const useCurrentSession = () => {
-    const context = useContext(SessionContext)
+    const { user } = useAuth()
+
+    const session = useMemo<AuthSession>(() => {
+        if (!user) {
+            return null
+        }
+
+        return {
+            user: {
+                id: user.id,
+                name: `${user.firstName} ${user.lastName}`.trim(),
+                email: user.email,
+                authority: [user.role],
+                image: null,
+            },
+        }
+    }, [user])
 
     return {
-        session: context,
+        session,
     }
 }
 

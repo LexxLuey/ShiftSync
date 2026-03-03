@@ -1,44 +1,53 @@
 'use client'
 
 import SignIn from '@/components/auth/SignIn'
-import { onSignInWithCredentials } from '@/server/actions/auth/handleSignIn'
-import handleOauthSignIn from '@/server/actions/auth/handleOauthSignIn'
+import { apiClient } from '@/lib/api/client'
+import { useAuth } from '@/context/AuthContext'
+import { getRoleHomePath } from '@/lib/auth/types'
 import { REDIRECT_URL_KEY } from '@/constants/app.constant'
-import { useSearchParams } from 'next/navigation'
-import type {
-    OnSignInPayload,
-    OnOauthSignInPayload,
-} from '@/components/auth/SignIn'
+import { useRouter, useSearchParams } from 'next/navigation'
+import type { OnSignInPayload } from '@/components/auth/SignIn'
+import type { AuthResponse } from '@/lib/auth/types'
+import type { NormalizedApiError } from '@/lib/api/types'
+
+const resolveErrorMessage = (error: unknown): string => {
+    const normalizedError = error as NormalizedApiError
+
+    if (normalizedError?.message) {
+        return normalizedError.message
+    }
+
+    return 'Unable to sign in. Please try again.'
+}
 
 const SignInClient = () => {
+    const router = useRouter()
     const searchParams = useSearchParams()
+    const { login } = useAuth()
     const callbackUrl = searchParams.get(REDIRECT_URL_KEY)
 
-    const handleSignIn = ({
+    const handleSignIn = async ({
         values,
         setSubmitting,
         setMessage,
     }: OnSignInPayload) => {
         setSubmitting(true)
 
-        onSignInWithCredentials(values, callbackUrl || '').then((data) => {
-            if (data?.error) {
-                setMessage(data.error as string)
-                setSubmitting(false)
-            }
-        })
-    }
-
-    const handleOAuthSignIn = async ({ type }: OnOauthSignInPayload) => {
-        if (type === 'google') {
-            await handleOauthSignIn('google')
-        }
-        if (type === 'github') {
-            await handleOauthSignIn('github')
+        try {
+            const response = await apiClient.post<AuthResponse, typeof values>(
+                '/auth/login',
+                values,
+            )
+            login(response)
+            router.replace(callbackUrl || getRoleHomePath(response.user.role))
+        } catch (error) {
+            setMessage(resolveErrorMessage(error))
+        } finally {
+            setSubmitting(false)
         }
     }
 
-    return <SignIn onSignIn={handleSignIn} onOauthSignIn={handleOAuthSignIn} />
+    return <SignIn onSignIn={handleSignIn} />
 }
 
 export default SignInClient

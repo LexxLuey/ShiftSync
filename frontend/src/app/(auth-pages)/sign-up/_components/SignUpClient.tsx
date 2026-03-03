@@ -3,9 +3,21 @@
 import toast from '@/components/ui/toast'
 import Notification from '@/components/ui/Notification'
 import SignUp from '@/components/auth/SignUp'
-import { apiSignUp } from '@/services/AuthService'
+import { apiClient } from '@/lib/api/client'
 import { useRouter } from 'next/navigation'
 import type { OnSignUpPayload } from '@/components/auth/SignUp'
+import type { AuthResponse } from '@/lib/auth/types'
+import type { NormalizedApiError } from '@/lib/api/types'
+
+const resolveErrorMessage = (error: unknown): string => {
+    const normalizedError = error as NormalizedApiError
+
+    if (normalizedError?.message) {
+        return normalizedError.message
+    }
+
+    return 'Unable to create your account. Please try again.'
+}
 
 const SignUpClient = () => {
     const router = useRouter()
@@ -17,7 +29,18 @@ const SignUpClient = () => {
     }: OnSignUpPayload) => {
         try {
             setSubmitting(true)
-            await apiSignUp(values)
+            const payload = {
+                firstName: values.firstName,
+                lastName: values.lastName,
+                email: values.email,
+                role: values.role,
+                password: values.password,
+                phone: values.phone || undefined,
+            }
+            await apiClient.post<AuthResponse, typeof payload>(
+                '/auth/register',
+                payload,
+            )
             toast.push(
                 <Notification title="Account created!" type="success">
                     You can now sign in from our sign in page
@@ -25,7 +48,7 @@ const SignUpClient = () => {
             )
             router.push('/sign-in')
         } catch (error) {
-            setMessage(error as string)
+            setMessage(resolveErrorMessage(error))
         } finally {
             setSubmitting(false)
         }

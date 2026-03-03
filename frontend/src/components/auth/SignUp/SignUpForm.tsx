@@ -8,11 +8,15 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { CommonProps } from '@/@types/common'
+import type { AppRole } from '@/lib/auth/types'
 
-type SignUpFormSchema = {
-    userName: string
-    password: string
+export type SignUpFormSchema = {
+    firstName: string
+    lastName: string
     email: string
+    role: AppRole
+    phone?: string
+    password: string
     confirmPassword: string
 }
 
@@ -31,13 +35,23 @@ interface SignUpFormProps extends CommonProps {
 
 const validationSchema = z
     .object({
-        email: z.email({ message: 'Please enter a valid email' }),
-        userName: z.string().min(1, { message: 'Please enter your name' }),
-        password: z.string().min(1, { message: 'Password required' }),
-        confirmPassword: z.string().min(1, { message: 'Confirm Password Required' }),
+        firstName: z.string().min(1, { message: 'First name is required' }),
+        lastName: z.string().min(1, { message: 'Last name is required' }),
+        email: z
+            .string()
+            .min(1, { message: 'Email is required' })
+            .email({ message: 'Please enter a valid email' }),
+        role: z.enum(['ADMIN', 'MANAGER', 'STAFF']),
+        phone: z.string().optional(),
+        password: z
+            .string()
+            .min(8, { message: 'Password must be at least 8 characters' }),
+        confirmPassword: z
+            .string()
+            .min(1, { message: 'Confirm password is required' }),
     })
     .refine((data) => data.password === data.confirmPassword, {
-        message: 'Password not match',
+        message: 'Passwords do not match',
         path: ['confirmPassword'],
     })
 
@@ -52,6 +66,15 @@ const SignUpForm = (props: SignUpFormProps) => {
         control,
     } = useForm<SignUpFormSchema>({
         resolver: zodResolver(validationSchema),
+        defaultValues: {
+            firstName: '',
+            lastName: '',
+            email: '',
+            role: 'STAFF',
+            phone: '',
+            password: '',
+            confirmPassword: '',
+        },
     })
 
     const handleSignUp = async (values: SignUpFormSchema) => {
@@ -63,24 +86,44 @@ const SignUpForm = (props: SignUpFormProps) => {
     return (
         <div className={className}>
             <Form onSubmit={handleSubmit(handleSignUp)}>
-                <FormItem
-                    label="User name"
-                    invalid={Boolean(errors.userName)}
-                    errorMessage={errors.userName?.message}
-                >
-                    <Controller
-                        name="userName"
-                        control={control}
-                        render={({ field }) => (
-                            <Input
-                                type="text"
-                                placeholder="User Name"
-                                autoComplete="off"
-                                {...field}
-                            />
-                        )}
-                    />
-                </FormItem>
+                <div className="grid gap-4 md:grid-cols-2">
+                    <FormItem
+                        label="First Name"
+                        invalid={Boolean(errors.firstName)}
+                        errorMessage={errors.firstName?.message}
+                    >
+                        <Controller
+                            name="firstName"
+                            control={control}
+                            render={({ field }) => (
+                                <Input
+                                    type="text"
+                                    placeholder="First name"
+                                    autoComplete="off"
+                                    {...field}
+                                />
+                            )}
+                        />
+                    </FormItem>
+                    <FormItem
+                        label="Last Name"
+                        invalid={Boolean(errors.lastName)}
+                        errorMessage={errors.lastName?.message}
+                    >
+                        <Controller
+                            name="lastName"
+                            control={control}
+                            render={({ field }) => (
+                                <Input
+                                    type="text"
+                                    placeholder="Last name"
+                                    autoComplete="off"
+                                    {...field}
+                                />
+                            )}
+                        />
+                    </FormItem>
+                </div>
                 <FormItem
                     label="Email"
                     invalid={Boolean(errors.email)}
@@ -99,6 +142,49 @@ const SignUpForm = (props: SignUpFormProps) => {
                         )}
                     />
                 </FormItem>
+                <div className="grid gap-4 md:grid-cols-2">
+                    <FormItem
+                        label="Role"
+                        invalid={Boolean(errors.role)}
+                        errorMessage={errors.role?.message}
+                    >
+                        <Controller
+                            name="role"
+                            control={control}
+                            render={({ field }) => (
+                                <select
+                                    className="input"
+                                    value={field.value}
+                                    onChange={(event) =>
+                                        field.onChange(event.target.value)
+                                    }
+                                >
+                                    <option value="STAFF">Staff</option>
+                                    <option value="MANAGER">Manager</option>
+                                    <option value="ADMIN">Admin</option>
+                                </select>
+                            )}
+                        />
+                    </FormItem>
+                    <FormItem
+                        label="Phone (Optional)"
+                        invalid={Boolean(errors.phone)}
+                        errorMessage={errors.phone?.message}
+                    >
+                        <Controller
+                            name="phone"
+                            control={control}
+                            render={({ field }) => (
+                                <Input
+                                    type="text"
+                                    placeholder="Phone"
+                                    autoComplete="off"
+                                    {...field}
+                                />
+                            )}
+                        />
+                    </FormItem>
+                </div>
                 <FormItem
                     label="Password"
                     invalid={Boolean(errors.password)}

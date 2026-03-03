@@ -6,6 +6,8 @@ import compression from 'compression';
 import mainRouter from './routes.js';
 import winston from 'winston';
 import errorHandler from './middleware/errorHandler.js';
+import docsRouter from './docs/routes.js';
+import { isSwaggerEnabled } from './docs/middleware.js';
 
 // Winston logger setup
 const logger = winston.createLogger({
@@ -21,8 +23,16 @@ const logger = winston.createLogger({
 
 const expressApp: Application = express();
 
+// CORS configuration
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
 // Middleware
-expressApp.use(cors());
+expressApp.use(cors(corsOptions));
 expressApp.use(helmet());
 expressApp.use(compression());
 expressApp.use(express.json());
@@ -35,6 +45,10 @@ expressApp.use((request: Request, response: Response, next: NextFunction) => {
 
 // Main API router
 expressApp.use('/api/v1', mainRouter);
+
+if (isSwaggerEnabled()) {
+    expressApp.use('/', docsRouter);
+}
 
 // Health check endpoint
 expressApp.get('/health', (request: Request, response: Response) => {

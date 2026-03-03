@@ -3,6 +3,7 @@ import AxiosResponseIntrceptorErrorCallback from './AxiosResponseIntrceptorError
 import AxiosRequestIntrceptorConfigCallback from './AxiosRequestIntrceptorConfigCallback'
 import appConfig from '@/configs/app.config'
 import type { AxiosError } from 'axios'
+import { AUTH_UNAUTHORIZED_EVENT } from '@/lib/auth/constants'
 
 if (!appConfig.apiBaseUrl) {
     // Keep this warning explicit so misconfiguration fails fast during setup.
@@ -29,6 +30,10 @@ AxiosBase.interceptors.request.use(
 AxiosBase.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
+        if (typeof window !== 'undefined' && error.response?.status === 401) {
+            window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT))
+        }
+
         const normalizedError = AxiosResponseIntrceptorErrorCallback(error)
         return Promise.reject(normalizedError)
     },
