@@ -1,9 +1,9 @@
 import { Metadata } from 'next'
 
 const pageMeta: Metadata = {
-    title: 'Ecme - The Ultimate Next & TypeScript Web Template',
+    title: 'ShiftSync - Employee Scheduling and Shift Management',
     description:
-        'Admin Template and Starter Kit with React, Tailwind Components and Next.js',
+        'Empower your workforce with ShiftSync - the ultimate employee scheduling and shift management solution. Streamline scheduling, manage shifts, and enhance communication for a more efficient workplace.',
     icons: {
         icon: '/favicon.ico',
     },

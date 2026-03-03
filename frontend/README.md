@@ -1,24 +1,67 @@
-# Ecme - The Ultimate Next.js & TypeScript Web Template
+# ShiftSync Frontend
 
-Ecme is a modern and responsive admin dashboard template built with Next.js and TypeScript. Designed to provide a highly customizable and easy-to-use platform for building admin interfaces, it includes a variety of reusable components, pre-designed pages, and dynamic features. 
+Next.js frontend for ShiftSync.
 
-This template is perfect for developing dashboards, web applications, CRM systems, e-commerce backends, and more. Whether you're building a small-scale admin panel or a large-scale enterprise application, Ecme is designed to be flexible and scalable.
+- Repo: https://github.com/LexxLuey/ShiftSync
 
-Key Features:
-- **Next.js Framework**: Built with the powerful Next.js framework, offering server-side rendering (SSR) out of the box.
-- **Responsive Layout**: Optimized for all screen sizes and devices.
-- **Dark/Light Mode**: Easily switch between light and dark themes.
-- **Configurable Themes**: Personalize colors, layouts, and more to fit your needs.
-- **Built with TypeScript**: Ensures robust type-checking and fast development.
-- **Multi-Locale Support**: Easily add and manage multiple languages.
-- **RTL Support**: Full Right-to-Left support for languages like Arabic or Hebrew.
-- **Tailwind Component-Based Architecture**: Reusable components to streamline your development process.
+## Stack
 
----
-### Demo
-Check out the [Live Demo](https://ecme-react.themenate.net/) to explore the template in action.
+- Next.js 16 (App Router)
+- React 19 + TypeScript
+- TanStack React Query
+- Axios
+- Zustand
 
+## Setup
 
-### Guide
-Please visit our [Online documentation](https://ecme-react.themenate.net/guide/documentation/introduction) for detailed guides, setup instructions, and customization options.
+```bash
+npm install
+```
 
+Create/update local env (`.env.local`):
+
+```env
+NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
+NEXT_PUBLIC_SOCKET_URL=http://localhost:4000
+```
+
+## Run
+
+Dev:
+
+```bash
+npm run dev
+```
+
+Type check:
+
+```bash
+npx tsc --noEmit
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Start production build:
+
+```bash
+npm run start
+```
+
+## Auth and Test Accounts
+
+Frontend uses backend JWT auth endpoints.
+
+If backend seed was run:
+
+- Admin: `admin@shiftsync.com` / `AdminPass123`
+- Manager: `manager1@shiftsync.com` / `ManagerPass123`
+- Staff: `staff1@shiftsync.com` / `StaffPass123`
+
+## Notes
+
+- Ensure backend is running and reachable from frontend.
+- Main API calls go to backend `/api/v1` through `NEXT_PUBLIC_API_BASE_URL`.

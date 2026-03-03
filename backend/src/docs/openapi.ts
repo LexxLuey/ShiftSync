@@ -1,7 +1,10 @@
 // @ts-ignore - swagger-jsdoc lacks type definitions
 import swaggerJsdoc from 'swagger-jsdoc';
 
-const serverUrl = process.env.SWAGGER_SERVER_URL || `http://localhost:${process.env.PORT || 4000}`;
+const configuredServerUrl = process.env.SWAGGER_SERVER_URL?.trim();
+const serverUrl = configuredServerUrl && configuredServerUrl.length > 0
+    ? configuredServerUrl
+    : '/';
 
 const swaggerOptions = {
     definition: {

@@ -187,3 +187,31 @@ When multiple optional filters exist, normalize each criterion first and return 
 
 Pattern to Watch:
 list pages with compound filters (staff/users/shifts)
+
+### 10. Escaped Route-Group Folder Names Break Next Typed Routes
+
+Mistake:
+Created a literal `src/app/\(protected-pages\)` directory instead of using `src/app/(protected-pages)`.
+
+Root Cause:
+Shell escaping was applied to the actual filesystem path during folder creation.
+
+Prevention Rule:
+When creating App Router route-group folders, always verify resulting directory names with `find src/app -maxdepth 2 -type d`.
+
+Pattern to Watch:
+commands that include parentheses in Next.js route-group paths
+
+### 11. Avoid Eager Redis Connections in Environments Without Redis
+
+Mistake:
+Redis lock client connected at boot and retried forever with localhost defaults, causing noisy deploy logs.
+
+Root Cause:
+Client initialization assumed Redis availability and used eager connection behavior.
+
+Prevention Rule:
+Initialize Redis clients with lazy connection and connect only on first lock usage; support `REDIS_URL` and optional password-based host/port config.
+
+Pattern to Watch:
+infrastructure-backed clients (Redis, queues, brokers) initialized during app startup
