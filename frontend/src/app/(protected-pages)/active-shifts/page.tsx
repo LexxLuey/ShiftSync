@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import useActiveShifts from '@/hooks/useActiveShifts'
 import useSocketEvents from '@/hooks/useSocketEvents'
 import ActiveShiftsList from '@/components/shared/ActiveShiftsList'
-import Select from '@/components/ui/Select'
 import { locationService } from '@/lib/api/locations'
 import type { LocationRecord } from '@/lib/api/locations'
+import type { ActiveShift } from '@/lib/api/types'
 
 export default function ActiveShiftsPage() {
     const { user } = useAuth()
@@ -37,7 +37,7 @@ export default function ActiveShiftsPage() {
     }, [locationsQuery.data?.data, user?.role])
 
     // Set default location
-    useMemo(() => {
+    useEffect(() => {
         if (locations.length > 0 && !selectedLocationId) {
             setSelectedLocationId(locations[0].id)
         }
@@ -78,9 +78,12 @@ export default function ActiveShiftsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                         Location
                     </label>
-                    <Select
+                    <select
+                        className="input"
                         value={selectedLocationId || ''}
-                        onChange={(e) => setSelectedLocationId(e.target.value || null)}
+                        onChange={(event) =>
+                            setSelectedLocationId(event.target.value || null)
+                        }
                     >
                         <option value="">Select a location...</option>
                         {locations.map((loc) => (
@@ -88,7 +91,7 @@ export default function ActiveShiftsPage() {
                                 {loc.name}
                             </option>
                         ))}
-                    </Select>
+                    </select>
                 </div>
             )}
 
@@ -104,14 +107,18 @@ export default function ActiveShiftsPage() {
                     <div className="bg-green-50 rounded-lg p-4">
                         <p className="text-sm text-green-600 font-medium">Staff Working</p>
                         <p className="text-3xl font-bold text-green-900 mt-1">
-                            {shifts.reduce((sum, s) => sum + s.assignedStaff.length, 0)}
+                            {shifts.reduce(
+                                (sum: number, s: ActiveShift) =>
+                                    sum + s.assignedStaff.length,
+                                0,
+                            )}
                         </p>
                     </div>
                     <div className="bg-yellow-50 rounded-lg p-4">
                         <p className="text-sm text-yellow-600 font-medium">Needed</p>
                         <p className="text-3xl font-bold text-yellow-900 mt-1">
                             {shifts.reduce(
-                                (sum, s) =>
+                                (sum: number, s: ActiveShift) =>
                                     sum +
                                     Math.max(0, s.headcountNeeded - s.assignedStaff.length),
                                 0,

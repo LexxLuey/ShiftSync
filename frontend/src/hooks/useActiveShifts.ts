@@ -2,10 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { activeShiftsService } from '@/lib/api/activeShiftsService'
-import type { NormalizedApiError } from '@/lib/api/types'
+import type { ActiveShiftsResponse, NormalizedApiError } from '@/lib/api/types'
 
 export default function useActiveShifts(locationId: string | null) {
-    const activeShiftsQuery = useQuery<unknown, NormalizedApiError>({
+    const activeShiftsQuery = useQuery<ActiveShiftsResponse, NormalizedApiError>(
+        {
         queryKey: ['activeShifts', locationId],
         queryFn: () => activeShiftsService.getActiveShifts(locationId as string),
         enabled: Boolean(locationId),

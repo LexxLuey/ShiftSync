@@ -2,10 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { auditService } from '@/lib/api/auditService'
-import type { GetAuditLogsParams, NormalizedApiError } from '@/lib/api/types'
+import type {
+    AuditLogsResponse,
+    GetAuditLogsParams,
+    NormalizedApiError,
+} from '@/lib/api/types'
 
 export default function useAuditLogs(params?: GetAuditLogsParams | null) {
-    const auditLogsQuery = useQuery<unknown, NormalizedApiError>({
+    const auditLogsQuery = useQuery<AuditLogsResponse, NormalizedApiError>({
         queryKey: ['auditLogs', params],
         queryFn: () =>
             auditService.getAuditLogs(
