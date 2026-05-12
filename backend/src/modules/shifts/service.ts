@@ -1,6 +1,13 @@
 import prismaClient from '../../lib/db/prisma.js';
 import { ValidationError, NotFoundError, ConflictError } from '../../lib/errors/customErrors.js';
 import { logAction } from '../audit/service.js';
+import {
+  emitShiftCreated,
+  emitShiftPublished,
+  emitShiftUpdated,
+} from '../../lib/events/index.js';
+import { createNotification } from '../notifications/service.js';
+import { syncReminderJobsForPublishedShift } from '../reminders/service.js';
 import type { CreateShiftPayload, UpdateShiftPayload } from './validation.js';
 
 export const createShift = async (
@@ -50,10 +57,13 @@ export const createShift = async (
     const shift = await tx.shift.create({
       data: {
         locationId,
+        title: payload.title,
         startTime,
         endTime,
         requiredSkillId: payload.requiredSkillId,
         headcountNeeded: payload.headcountNeeded,
+        isOptional: payload.isOptional ?? false,
+        ...(payload.eventInstanceId ? { eventInstanceId: payload.eventInstanceId } : {}),
         status: 'DRAFT',
       },
       include: {
@@ -82,9 +92,21 @@ export const createShift = async (
         'SHIFT',
         shift.id,
         null,
-        { id: shift.id, locationId, startTime, endTime, requiredSkillId: payload.requiredSkillId, headcountNeeded: payload.headcountNeeded }
+        {
+          id: shift.id,
+          locationId,
+          title: payload.title,
+          startTime,
+          endTime,
+          requiredSkillId: payload.requiredSkillId,
+          headcountNeeded: payload.headcountNeeded,
+          isOptional: payload.isOptional ?? false,
+          eventInstanceId: payload.eventInstanceId ?? null,
+        }
       );
     }
+
+    emitShiftCreated(shift);
 
     return shift;
   });
@@ -159,6 +181,13 @@ export const updateShift = async (
   return await prismaClient.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({
       where: { id: shiftId },
+      include: {
+        _count: {
+          select: {
+            assignments: true,
+          },
+        },
+      },
     });
 
     if (!shift) {
@@ -199,6 +228,14 @@ export const updateShift = async (
       }
     }
 
+    if (payload.headcountNeeded !== undefined && payload.headcountNeeded < 1) {
+      throw new ValidationError(
+        'Headcount must be at least 1',
+        { headcountNeeded: payload.headcountNeeded },
+        ['Increase headcount to at least 1.']
+      );
+    }
+
     // Auto-cancel pending swaps when shift is edited
     const pendingSwaps = await tx.swapRequest.findMany({
       where: { shiftId, status: 'PENDING' }
@@ -215,10 +252,13 @@ export const updateShift = async (
     const updated = await tx.shift.update({
       where: { id: shiftId },
       data: {
+        ...(payload.title !== undefined ? { title: payload.title } : {}),
         ...(payload.startTime && { startTime: new Date(payload.startTime) }),
         ...(payload.endTime && { endTime: new Date(payload.endTime) }),
         ...(payload.requiredSkillId && { requiredSkillId: payload.requiredSkillId }),
-        ...(payload.headcountNeeded && { headcountNeeded: payload.headcountNeeded }),
+        ...(payload.headcountNeeded !== undefined ? { headcountNeeded: payload.headcountNeeded } : {}),
+        ...(payload.isOptional !== undefined ? { isOptional: payload.isOptional } : {}),
+        ...(payload.eventInstanceId !== undefined ? { eventInstanceId: payload.eventInstanceId } : {}),
       },
       include: {
         assignments: {
@@ -246,19 +286,28 @@ export const updateShift = async (
         'SHIFT',
         shiftId,
         {
+          title: shift.title,
           startTime: shift.startTime,
           endTime: shift.endTime,
           requiredSkillId: shift.requiredSkillId,
           headcountNeeded: shift.headcountNeeded,
+          isOptional: shift.isOptional,
+          eventInstanceId: shift.eventInstanceId,
         },
         {
+          title: updated.title,
           startTime: updated.startTime,
           endTime: updated.endTime,
           requiredSkillId: updated.requiredSkillId,
           headcountNeeded: updated.headcountNeeded,
+          isOptional: updated.isOptional,
+          eventInstanceId: updated.eventInstanceId,
         }
       );
     }
+
+    const affectedUserIds = updated.assignments.map((assignment) => assignment.user.id);
+    emitShiftUpdated(updated, affectedUserIds);
 
     return updated;
   });
@@ -268,6 +317,13 @@ export const deleteShift = async (shiftId: string, userId?: string) => {
   return await prismaClient.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({
       where: { id: shiftId },
+      include: {
+        _count: {
+          select: {
+            assignments: true,
+          },
+        },
+      },
     });
 
     if (!shift) {
@@ -300,8 +356,11 @@ export const deleteShift = async (shiftId: string, userId?: string) => {
         {
           id: shift.id,
           locationId: shift.locationId,
+          title: shift.title,
           startTime: shift.startTime,
           endTime: shift.endTime,
+          isOptional: shift.isOptional,
+          eventInstanceId: shift.eventInstanceId,
           status: shift.status,
         },
         null
@@ -316,6 +375,13 @@ export const publishShift = async (shiftId: string, userId?: string) => {
   return await prismaClient.$transaction(async (tx) => {
     const shift = await tx.shift.findUnique({
       where: { id: shiftId },
+      include: {
+        _count: {
+          select: {
+            assignments: true,
+          },
+        },
+      },
     });
 
     if (!shift) {
@@ -333,6 +399,23 @@ export const publishShift = async (shiftId: string, userId?: string) => {
         [`Current hours until shift: ${Math.round(hoursUntilShift)}. You need at least 48 hours.`]
       );
     }
+
+    const assignedHeadcount = shift._count.assignments;
+    const missingHeadcount = Math.max(0, shift.headcountNeeded - assignedHeadcount);
+    const warnings =
+      !shift.isOptional && missingHeadcount > 0
+        ? [
+            {
+              code: 'UNDERFILLED_REQUIRED_SLOT',
+              message: `Publishing with unfilled required headcount (${assignedHeadcount}/${shift.headcountNeeded})`,
+              details: {
+                assignedHeadcount,
+                requiredHeadcount: shift.headcountNeeded,
+                missingHeadcount,
+              },
+            },
+          ]
+        : [];
 
     const published = await tx.shift.update({
       where: { id: shiftId },
@@ -370,9 +453,30 @@ export const publishShift = async (shiftId: string, userId?: string) => {
       );
     }
 
+    emitShiftPublished(published);
+
+    const notificationMessage = `${published.title} was published`;
+    await Promise.all(
+      published.assignments.map(async (assignment) =>
+        createNotification(
+          {
+            userId: assignment.user.id,
+            type: 'shift:published',
+            message: notificationMessage,
+            relatedEntityId: published.id,
+            relatedEntityType: 'SHIFT',
+          },
+          tx,
+        ),
+      ),
+    );
+
+    await syncReminderJobsForPublishedShift(shiftId, tx);
+
     return {
       ...published,
       hoursUntilDeadline: Math.round(hoursUntilShift),
+      warnings,
     };
   });
 };
@@ -437,6 +541,9 @@ export const getActiveShifts = async (locationId: string, now: Date = new Date()
     startTime: shift.startTime,
     endTime: shift.endTime,
     skill: shift.requiredSkill.name,
+    title: shift.title,
+    isOptional: shift.isOptional,
+    eventInstanceId: shift.eventInstanceId,
     headcountNeeded: shift.headcountNeeded,
     assignedStaff: shift.assignments.map((a) => ({
       id: a.user.id,

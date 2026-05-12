@@ -1,4 +1,11 @@
 import { Router } from 'express';
+import { authenticate, restrictTo } from '../auth/middleware.js';
+import {
+  verifyLocationAccess,
+  verifyLocationVisibility,
+  verifyShiftAccess,
+  verifyShiftVisibility,
+} from '../auth/guards.js';
 import {
   postShift,
   getShifts,
@@ -10,6 +17,7 @@ import {
 } from './controller.js';
 
 const shiftsRouter = Router({ mergeParams: true });
+shiftsRouter.use(authenticate);
 
 /**
  * @openapi
@@ -44,7 +52,12 @@ const shiftsRouter = Router({ mergeParams: true });
  *       201:
  *         description: Shift created successfully
  */
-shiftsRouter.post('/:locationId/shifts', postShift);
+shiftsRouter.post(
+  '/:locationId/shifts',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyLocationAccess('locationId'),
+  postShift,
+);
 
 /**
  * @openapi
@@ -74,7 +87,7 @@ shiftsRouter.post('/:locationId/shifts', postShift);
  *       200:
  *         description: Shifts list
  */
-shiftsRouter.get('/:locationId/shifts', getShifts);
+shiftsRouter.get('/:locationId/shifts', verifyLocationVisibility('locationId'), getShifts);
 
 /**
  * @openapi
@@ -92,7 +105,7 @@ shiftsRouter.get('/:locationId/shifts', getShifts);
  *       200:
  *         description: Shift details
  */
-shiftsRouter.get('/:shiftId', getShift);
+shiftsRouter.get('/:shiftId', verifyShiftVisibility('shiftId'), getShift);
 
 /**
  * @openapi
@@ -116,7 +129,7 @@ shiftsRouter.get('/:shiftId', getShift);
  *       200:
  *         description: Shift updated
  */
-shiftsRouter.put('/:shiftId', putShift);
+shiftsRouter.put('/:shiftId', restrictTo('ADMIN', 'MANAGER'), verifyShiftAccess('shiftId'), putShift);
 
 /**
  * @openapi
@@ -134,7 +147,12 @@ shiftsRouter.put('/:shiftId', putShift);
  *       200:
  *         description: Shift deleted
  */
-shiftsRouter.delete('/:shiftId', deleteShiftHandler);
+shiftsRouter.delete(
+  '/:shiftId',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyShiftAccess('shiftId'),
+  deleteShiftHandler,
+);
 
 /**
  * @openapi
@@ -152,7 +170,12 @@ shiftsRouter.delete('/:shiftId', deleteShiftHandler);
  *       200:
  *         description: Shift published
  */
-shiftsRouter.post('/:shiftId/publish', postPublishShift);
+shiftsRouter.post(
+  '/:shiftId/publish',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyShiftAccess('shiftId'),
+  postPublishShift,
+);
 
 /**
  * @openapi
@@ -194,6 +217,10 @@ shiftsRouter.post('/:shiftId/publish', postPublishShift);
  *                       assignedStaff:
  *                         type: array
  */
-shiftsRouter.get('/:locationId/active-shifts', getActiveShiftsHandler);
+shiftsRouter.get(
+  '/:locationId/active-shifts',
+  verifyLocationVisibility('locationId'),
+  getActiveShiftsHandler,
+);
 
 export default shiftsRouter;

@@ -17,11 +17,11 @@ export const notificationsService = {
     },
 
     markRead(notificationId: string) {
-        return apiClient.put<Notification>(`/notifications/${notificationId}/read`, {})
+        return apiClient.patch<Notification>(`/notifications/${notificationId}/read`, {})
     },
 
     markAllRead() {
-        return apiClient.put<void>('/notifications/mark-all-read', {})
+        return apiClient.patch<void>('/notifications/mark-all-read', {})
     },
 
     deleteNotification(notificationId: string) {

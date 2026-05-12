@@ -215,3 +215,62 @@ Initialize Redis clients with lazy connection and connect only on first lock usa
 
 Pattern to Watch:
 infrastructure-backed clients (Redis, queues, brokers) initialized during app startup
+
+### 12. Exact Optional Types Require Omitted Keys, Not Undefined Values
+
+Mistake:
+Passed `{ key: undefined }` into service methods while `exactOptionalPropertyTypes` was enabled, causing compile failures.
+
+Root Cause:
+Built parameter objects eagerly instead of conditionally spreading present values.
+
+Prevention Rule:
+When optional fields are truly optional under strict TS config, construct payloads with conditional spreads so absent keys are omitted.
+
+Pattern to Watch:
+controller-to-service query/filter object assembly
+
+### 13. Prisma Include Shape Must Match Downstream Usage
+
+Mistake:
+Used `shift._count.assignments` in publish logic without updating the Prisma query include shape for that code path.
+
+Root Cause:
+Copied warning logic across methods but missed the exact `findUnique` include block in the target function.
+
+Prevention Rule:
+Any time a service reads `_count` or nested relations, confirm the same function’s query explicitly includes that relation before compiling.
+
+Pattern to Watch:
+publish/update/delete service methods with similar find queries
+
+### 14. Worker Runtime Dependencies Must Be Verified Beyond Type Build
+
+Mistake:
+Reminder worker compiled successfully, but runtime dependency checks (`nodemailer`, env loading, process boot) were not validated immediately.
+
+Root Cause:
+Relied on TypeScript build as proxy for runtime readiness of background process code.
+
+Prevention Rule:
+For every new worker/process type, verify three things before closing phase:
+- dependency present in `package.json` + lockfile
+- process boots with env file
+- startup logs confirm worker loop entered
+
+Pattern to Watch:
+new worker entrypoints, SMTP/queue integrations, optional runtime imports
+
+### 15. React Query Error Shapes Need Explicit Unknown Narrowing
+
+Mistake:
+Directly cast `calendarQuery.error` from React Query to a custom API error type, causing strict TypeScript compile failure.
+
+Root Cause:
+React Query exposes `error` as `Error | null` by default, which does not structurally match custom API error types.
+
+Prevention Rule:
+When reading `query.error` with custom normalized error contracts, first cast through `unknown` (or add a type guard) before reading custom fields.
+
+Pattern to Watch:
+frontend query/mutation error rendering paths in new pages

@@ -9,6 +9,8 @@ import {
     approveSwapRequest,
     cancelSwapRequest,
     expireOldSwaps,
+    listSwapRequests,
+    getEligibleSwapTargets,
 } from './service.js'
 import {
     createSwapRequestSchema,
@@ -16,6 +18,58 @@ import {
     managerRejectSwapSchema,
 } from './validation.js'
 import prismaClient from '../../lib/db/prisma.js';
+
+const parseQueryNumber = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'string') {
+        return fallback
+    }
+
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) {
+        return fallback
+    }
+
+    return parsed
+}
+
+export const getSwapRequestsHandler = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const actor = request.user as { id: string; role: 'ADMIN' | 'MANAGER' | 'STAFF' } | undefined
+        if (!actor) {
+            response.status(401).json({ success: false, error: { message: 'Not authenticated' } })
+            return
+        }
+
+        const status = typeof request.query.status === 'string' ? request.query.status : undefined
+        const allowedStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'EXPIRED'] as const
+        const parsedStatus = status && allowedStatuses.includes(status as any)
+            ? (status as (typeof allowedStatuses)[number])
+            : undefined
+        const locationId = typeof request.query.locationId === 'string' ? request.query.locationId : undefined
+        const userId = typeof request.query.userId === 'string' ? request.query.userId : undefined
+        const limit = parseQueryNumber(request.query.limit, 20)
+        const offset = parseQueryNumber(request.query.offset, 0)
+
+        const data = await listSwapRequests(
+            {
+                ...(parsedStatus ? { status: parsedStatus } : {}),
+                ...(locationId ? { locationId } : {}),
+                ...(userId ? { userId } : {}),
+                limit,
+                offset,
+            },
+            actor,
+        )
+
+        response.status(200).json(data)
+    } catch (error) {
+        next(error)
+    }
+}
 
 /**
  * Create swap or drop request for a shift
@@ -68,6 +122,57 @@ export const postSwapRequest = async (
             success: true,
             data: swapRequest,
         })
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const postValidateSwapRequest = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const { shiftId } = request.params as { shiftId: string }
+        const payload = validateSchema(createSwapRequestSchema, request.body)
+        const requestingUserId = request.user?.id
+
+        if (!requestingUserId) {
+            response.status(401).json({ success: false, error: { message: 'Not authenticated' } })
+            return
+        }
+
+        const validation = await validateSwapRequest(
+            shiftId,
+            requestingUserId,
+            payload.type,
+            payload.targetUserId,
+        )
+
+        response.status(200).json(validation)
+    } catch (error) {
+        next(error)
+    }
+}
+
+export const getEligibleSwapTargetsHandler = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const { shiftId } = request.params as { shiftId: string }
+        const requestingUserId = request.user?.id
+        const limit = parseQueryNumber(request.query.limit, 20)
+        const search = typeof request.query.search === 'string' ? request.query.search : undefined
+
+        if (!requestingUserId) {
+            response.status(401).json({ success: false, error: { message: 'Not authenticated' } })
+            return
+        }
+
+        const targets = await getEligibleSwapTargets(shiftId, requestingUserId, limit, search)
+        response.status(200).json(targets)
     } catch (error) {
         next(error)
     }

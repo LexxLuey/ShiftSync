@@ -59,6 +59,48 @@ export const createException = async (userId: string, payload: CreateExceptionPa
   return exception;
 };
 
+export const deleteAvailability = async (userId: string, availabilityId: string) => {
+  const availability = await prismaClient.availability.findFirst({
+    where: {
+      id: availabilityId,
+      userId,
+    },
+  });
+
+  if (!availability) {
+    throw new NotFoundError('Availability not found', { userId, availabilityId });
+  }
+
+  await prismaClient.availability.delete({
+    where: {
+      id: availabilityId,
+    },
+  });
+
+  return availability;
+};
+
+export const deleteException = async (userId: string, exceptionId: string) => {
+  const exception = await prismaClient.exception.findFirst({
+    where: {
+      id: exceptionId,
+      userId,
+    },
+  });
+
+  if (!exception) {
+    throw new NotFoundError('Exception not found', { userId, exceptionId });
+  }
+
+  await prismaClient.exception.delete({
+    where: {
+      id: exceptionId,
+    },
+  });
+
+  return exception;
+};
+
 export const getAvailability = async (userId: string) => {
   const user = await prismaClient.user.findUnique({ where: { id: userId } });
   if (!user) {

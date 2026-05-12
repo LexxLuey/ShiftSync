@@ -1,5 +1,226 @@
 # Frontend Phase 1 Todo (JWT Auth + Role Layout + Staff)
 
+---
+
+# Church MVP Phase 1 Todo (Foundation)
+
+## Plan
+
+- [x] Extend Prisma schema for church foundation entities and fields:
+- [x] Add `Shift.title`, `Shift.isOptional`, `Shift.eventInstanceId`.
+- [x] Add `EventTemplate` + `EventTemplateRequirement` models.
+- [x] Add persistent `Notification` model and user relation.
+- [x] Create migration SQL for the above schema changes.
+- [x] Replace in-memory notification store with DB-backed notification service.
+- [x] Harden scheduling/auth routing with consistent `authenticate` + role checks.
+- [x] Enforce manager location scope checks on scheduling mutations.
+- [x] Resolve Phase 1 FE/BE contract mismatches (availability delete, swap listing/validation/eligible targets, reports projection route, notifications method alignment, audit routes availability).
+- [x] Seed church domain primitives (skills, centers, super admins, CCO/ACO mappings, base templates).
+- [x] Run backend/frontend type/build verification and fix regressions.
+
+## Verification Checklist
+
+- [x] Prisma schema validates and migration file is present.
+- [x] Notification APIs persist and return records from DB.
+- [x] Scheduling mutation endpoints reject unauthenticated/unauthorized access.
+- [x] Manager cannot mutate schedules outside assigned locations.
+- [x] Availability delete endpoints work with frontend API paths.
+- [x] Swap list + validate + eligible targets endpoints satisfy frontend callers.
+- [x] Reports projection route accepts `/shifts/:shiftId/projection`.
+- [x] Audit log endpoints are mounted and usable by frontend.
+- [ ] Seed completes with church-centric baseline data.
+- [x] `backend` TypeScript build passes.
+- [x] `frontend` TypeScript build passes.
+
+## Review Summary
+What changed:
+- Added church foundation schema: `Shift.title`, `Shift.isOptional`, `Shift.eventInstanceId`, `EventTemplate`, `EventTemplateRequirement`, and persistent `Notification`.
+- Added migration `20260512162000_church_phase1_foundation`.
+- Replaced in-memory notifications with Prisma-backed notification storage and updated notification controller flows to async DB operations.
+- Hardened scheduling/auth routes with consistent authentication + scope guards (location visibility, shift access, assignment access).
+- Added missing API contracts:
+- `DELETE /users/:userId/availability/:availabilityId`
+- `DELETE /users/:userId/exceptions/:exceptionId`
+- `GET /swap-requests`
+- `POST /shifts/:shiftId/swap-requests/validate`
+- `GET /shifts/:shiftId/eligible-swap-targets`
+- `GET /shifts/:shiftId/projection`
+- Added audit API module and mounted:
+- `GET /audit-logs`
+- `GET /audit-logs/export`
+- Updated frontend API clients for contract alignment (`PATCH` notifications, swaps listing behavior, reports projection path, assignment eligible-staff unwrap, shift type additions).
+- Rewrote seed data to church domain primitives (centers, super admins, CCO/ACO managers, teachers/volunteers, certifications, skills, recurring templates, sample shifts).
+
+Why:
+- Establish church-specific Phase 1 foundation while closing backend/frontend contract gaps that would block Phase 2 scheduling workflows.
+
+Edge cases handled:
+- Manager scope enforcement on location/shift/assignment mutations.
+- Staff visibility constrained to certified centers.
+- Notification list capped per user in persistent store.
+- Swap list visibility scoped by actor role and certification.
+
+Concurrency considerations:
+- Existing Redis-lock assignment/swap paths preserved.
+- Validation still executed in lock-protected flows before commit.
+
+Time zone considerations:
+- Seeded centers with `Africa/Lagos`.
+- Seed sample shifts created from center-local time and converted to UTC (`fromZonedTime`) to keep UTC DB storage discipline.
+
+Verification notes:
+- `npm run build` passed in `backend`.
+- `npm run build` passed in `frontend`.
+- `npm run seed` code path executes, but full completion is blocked in this environment by DB host resolution (`ENOTFOUND tenant/user ...`).
+
+---
+
+# Church MVP Phase 3 Todo (Reminders)
+
+## Plan
+
+- [x] Add `ReminderJob` schema model + enums with idempotency key and due-status indexes.
+- [x] Add migration for reminder enums/table/indexes/FKs.
+- [x] Create centralized reminder orchestration service for create/sync/cancel behaviors.
+- [x] Wire reminder sync/cancel into assignment create/delete, shift publish, and swap approval ownership changes.
+- [x] Add reminder worker process (`worker:reminders`) with polling, Redis lock, channel dispatch, retry/failure states.
+- [x] Add SMTP email utility and env-driven config.
+- [x] Extend notification type unions for reminder notifications (backend + frontend).
+- [x] Update notification bell rendering for reminder types.
+- [x] Verify backend/frontend compile and worker boot.
+
+## Verification Checklist
+
+- [x] Reminder jobs use unique `(userId, shiftId, channel, window)` idempotency constraint.
+- [x] Only published shifts produce reminder jobs; draft shifts do not.
+- [x] Assignment removal and swap ownership changes cancel prior assignee pending jobs.
+- [x] Assignment add and publish create future-window jobs only (24h/2h), skipping past windows.
+- [x] Worker sends reminders once, marks `SENT`, retries transient failures, and marks terminal `FAILED`.
+- [x] In-app reminder delivery writes to persistent notifications.
+- [x] Existing notification list/count/read/mark-all/delete flows remain intact.
+
+## Review Summary
+What changed:
+- Added Prisma reminder primitives:
+  - `ReminderChannel`, `ReminderWindow`, `ReminderJobStatus`
+  - `ReminderJob` model and relations on `User`/`Shift`
+  - migration `20260513001000_church_phase3_reminders`.
+- Added reminder orchestration service:
+  - `syncReminderJobsForAssignment`
+  - `syncReminderJobsForPublishedShift`
+  - `cancelReminderJobsForAssignment`
+  - message/type helpers for reminder notifications.
+- Added reminder worker process:
+  - polls due `PENDING` jobs
+  - locks each job via Redis lock helper
+  - dispatches `IN_APP` reminders via `createNotification`
+  - dispatches `EMAIL` reminders via SMTP
+  - retries with delayed `dueAt`, marks `FAILED` after max retries.
+- Added SMTP utility (`src/lib/email/smtp.ts`) with env validation:
+  - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`.
+- Added backend script:
+  - `npm run worker:reminders`
+- Added frontend/backend notification type coverage for:
+  - `reminder:24h`
+  - `reminder:2h`
+- Hardened reminder sync for concurrent reruns by handling unique-key race collisions safely.
+
+Why:
+- Deliver Phase 3 reminder automation with KISS architecture: one DB table + one worker process, reusing existing assignment/publish/swap and notification flows.
+
+Edge cases handled:
+- Missed windows are skipped (no catch-up send for past 24h/2h windows).
+- Re-publish/re-sync is idempotent and does not duplicate jobs.
+- Cancelled jobs can be reactivated when assignment is re-added.
+- Optional/draft behavior remains governed by published-shift-only reminder scheduling.
+
+Concurrency considerations:
+- Unique DB key prevents duplicate reminder jobs for the same user/shift/channel/window.
+- Per-job Redis lock prevents duplicate sends during concurrent worker loops.
+- Worker re-checks current status inside lock before send.
+- Reminder sync handles create-race collisions without failing the caller transaction.
+
+Time zone considerations:
+- Reminder `dueAt` is computed from `shift.startTime` (UTC DB source of truth), preserving existing location-timezone conversion discipline at shift-generation time.
+
+Verification notes:
+- `npm run prisma:generate` passed in `backend`.
+- `npm run build` passed in `backend`.
+- `npm run build` passed in `frontend`.
+- Worker boot smoke check (`node --env-file=.env dist/workers/reminders.worker.js`) starts/stops and logs correctly; full delivery execution in this sandbox is blocked by local DB connectivity permissions.
+
+---
+
+# Church MVP Phase 4 Todo (Calendar Launch)
+
+## Plan
+
+- [x] Add backend `calendar` module with `GET /api/v1/calendar`.
+- [x] Add calendar query validation with required `startDate`, `endDate` and optional filters (`locationId`, `title`, `assignedUserId`, `mine`).
+- [x] Enforce actor scope rules in calendar service (`ADMIN`, `MANAGER`, `STAFF`) and staff `mine` enforcement.
+- [x] Use overlap-safe range matching with end-exclusive boundary logic.
+- [x] Return shift + location + required skill + assignment user data for calendar rendering.
+- [x] Add frontend calendar API client + `useCalendar` query hook.
+- [x] Replace `/schedule` page weekly grid with weekly/monthly FullCalendar and filter bar.
+- [x] Add center/title/assigned staff/my schedule filters and date navigation (prev/next/today via calendar toolbar).
+- [x] Update route authority and nav so `/schedule` includes staff users.
+- [x] Update staff post-login landing route to `/schedule`.
+- [x] Add launch docs: runbook + pilot checklist.
+- [x] Run backend and frontend build verification.
+
+## Verification Checklist
+
+- [x] Manager scope prevents viewing calendar outside assigned centers.
+- [x] Staff is forced to personal-schedule visibility and cannot query others via `assignedUserId`.
+- [x] Calendar query uses published shifts only for launch surface.
+- [x] Weekly/monthly views use one API with consistent overlap-safe boundaries.
+- [x] Filters (center, title, assigned staff, mine) work in combination.
+- [x] Existing schedule builder and reminders remain intact.
+
+## Review Summary
+What changed:
+- Added backend calendar read module (`routes/controller/service/validation`) and mounted `/api/v1/calendar`.
+- Added role-scoped location visibility rules directly in calendar service:
+  - Admin: all centers
+  - Manager: managed centers only
+  - Staff: certified centers, `mine=true` enforced
+- Implemented safe date overlap filtering:
+  - `startTime < endDateExclusive`
+  - `endTime >= startDate`
+- Added frontend calendar data layer:
+  - `frontend/src/lib/api/calendar.ts`
+  - `frontend/src/hooks/useCalendar.ts`
+  - calendar query/response types in API types.
+- Replaced `/schedule` UI with FullCalendar weekly/monthly surface plus filters and manager CTAs to:
+  - `/event-templates`
+  - `/schedule-builder`
+- Updated role experience:
+  - `/schedule` route/nav now includes `STAFF`
+  - staff home route now resolves to `/schedule`.
+- Added launch operations docs:
+  - `docs/phase4-calendar-runbook.md`
+  - `docs/phase4-pilot-checklist.md`
+
+Why:
+- Deliver a read-focused calendar launch on top of existing scheduling/reminder foundations, keeping implementation minimal and reusable.
+
+Edge cases handled:
+- Empty scope lists return no data safely.
+- Staff-level privacy is enforced server-side even if frontend passes `assignedUserId`.
+- Calendar title search is case-insensitive.
+- Date range boundaries do not drop shifts that overlap view edges.
+
+Concurrency considerations:
+- Calendar endpoint is read-only and stateless; no new write path introduced.
+- Existing generation/assignment/publish locking behavior remains unchanged.
+
+Time zone considerations:
+- Date query boundaries are normalized to UTC date starts, with end date treated as end-exclusive (+1 day), preserving UTC DB storage discipline.
+
+Verification notes:
+- `npm run build` passed in `backend`.
+- `npm run build` passed in `frontend`.
+
 ## Plan
 
 - [x] Add client auth primitives (`storage`, `types`, `AuthContext`, `AuthGate`) with JWT/localStorage lifecycle.
@@ -87,3 +308,71 @@ Created complete swap request system with 5 files:
 - Frontend swap request UI
 
 All backend code follows Phase 3 patterns and compiles without errors.
+
+---
+
+# Church MVP Phase 2 Todo (Scheduling)
+
+## Plan
+
+- [x] Add `event-templates` backend module with CRUD + archive semantics (`isActive=false`) and role/scope enforcement.
+- [x] Add `scheduling` backend module with `POST /api/v1/schedules/generate` and Redis scope lock.
+- [x] Implement deterministic event instance generation and idempotent duplicate-skip behavior.
+- [x] Convert generated local template time to UTC using target center timezone.
+- [x] Extend eligible staff suggestions to include `MANAGER` + `STAFF`, fairness window counts, and ranking metadata.
+- [x] Update shift publish response to include non-blocking warnings for underfilled required slots.
+- [x] Add lightweight `skills` read endpoint and replace frontend mock skills usage.
+- [x] Add frontend Event Templates screen (create/update/archive, requirements editing).
+- [x] Add frontend Schedule Builder screen (generate, review, suggest+assign, publish selected).
+- [x] Register new protected routes + navigation entries for scheduling flows.
+- [x] Run backend and frontend build verification.
+
+## Verification Checklist
+
+- [x] Manager cannot create/view ministry templates and is restricted to managed centers.
+- [x] Admin can create location or ministry templates.
+- [x] Generation produces draft shifts only.
+- [x] Re-running generation skips existing matching slots and returns skipped metadata.
+- [x] Eligible staff suggestions return fairness rank + assignment count in window.
+- [x] Candidate pool excludes admins and includes manager/staff users only.
+- [x] Publish endpoint returns warnings for underfilled required shifts and does not block publication.
+- [x] Frontend pages for templates and schedule builder compile and route correctly.
+
+## Review Summary
+What changed:
+- Added backend modules:
+  - `event-templates` (`POST/GET/GET:id/PUT/DELETE`) with manager/admin scope checks and archive delete.
+  - `scheduling` (`POST /schedules/generate`) with recurring expansion, deterministic `eventInstanceId`, idempotent skip, and Redis lock protection.
+  - `skills` (`GET /skills`) for live skill catalogs.
+- Extended assignment suggestion response with:
+  - fairness window params (`fairnessStartDate`, `fairnessEndDate`),
+  - ranking metadata (`assignmentCountInWindow`, `rank`),
+  - candidate pool updated to `MANAGER + STAFF`.
+- Updated shift publish flow to include `warnings[]` when required headcount is underfilled (warn-only behavior).
+- Added frontend API/hook layer for event templates, scheduling generation, and skills.
+- Replaced mocked skills hook with live API-backed hook.
+- Added new protected pages:
+  - `/event-templates`
+  - `/schedule-builder`
+- Added nav and route authority for new manager/admin scheduling workflows.
+
+Why:
+- Deliver Phase 2 MVP scheduling capabilities with minimal surface area, reusing existing shift and assignment flows while introducing recurring template generation and assisted ranking.
+
+Edge cases handled:
+- Manager center scoping is enforced on template management and schedule generation.
+- Ministry templates expand across selected centers; location templates stay center-bound.
+- Duplicate generation reruns are non-destructive and report skipped entries.
+- Optional slots can publish unfilled without warnings.
+
+Concurrency considerations:
+- Schedule generation is protected by a Redis distributed lock key derived from date range + selected centers + template scope.
+- Existing assignment lock behavior remains unchanged.
+
+Time zone considerations:
+- Template local times are converted to UTC per target center timezone during slot generation.
+- Overnight template slots are handled by rolling end time to next date when end <= start.
+
+Verification notes:
+- `npm run build` passed in `backend`.
+- `npm run build` passed in `frontend`.

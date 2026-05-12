@@ -1,7 +1,39 @@
 import { Router } from 'express';
-import { postAvailability, postException, getAvailabilityHandler, checkAvailability } from './controller.js';
+import type { NextFunction, Request, Response } from 'express';
+import { ForbiddenError } from '../../lib/errors/customErrors.js';
+import { authenticate } from '../auth/middleware.js';
+import {
+  postAvailability,
+  postException,
+  getAvailabilityHandler,
+  checkAvailability,
+  deleteAvailabilityHandler,
+  deleteExceptionHandler,
+} from './controller.js';
 
 const availabilityRouter = Router({ mergeParams: true });
+availabilityRouter.use(authenticate);
+
+const ensureUserAvailabilityAccess = (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): void => {
+  const actor = request.user as { id: string; role: 'ADMIN' | 'MANAGER' | 'STAFF' } | undefined;
+  const userId = request.params.userId as string | undefined;
+
+  if (!actor || !userId) {
+    next(new ForbiddenError('Not authorized to access this availability resource'));
+    return;
+  }
+
+  if (actor.role === 'ADMIN' || actor.role === 'MANAGER' || actor.id === userId) {
+    next();
+    return;
+  }
+
+  next(new ForbiddenError('Not authorized to access this availability resource'));
+};
 
 /**
  * @openapi
@@ -40,7 +72,7 @@ const availabilityRouter = Router({ mergeParams: true });
  *       400:
  *         description: Validation error
  */
-availabilityRouter.post('/:userId/availability', postAvailability);
+availabilityRouter.post('/:userId/availability', ensureUserAvailabilityAccess, postAvailability);
 
 /**
  * @openapi
@@ -74,7 +106,7 @@ availabilityRouter.post('/:userId/availability', postAvailability);
  *       201:
  *         description: Exception created
  */
-availabilityRouter.post('/:userId/exceptions', postException);
+availabilityRouter.post('/:userId/exceptions', ensureUserAvailabilityAccess, postException);
 
 /**
  * @openapi
@@ -92,7 +124,7 @@ availabilityRouter.post('/:userId/exceptions', postException);
  *       200:
  *         description: User availability
  */
-availabilityRouter.get('/:userId/availability', getAvailabilityHandler);
+availabilityRouter.get('/:userId/availability', ensureUserAvailabilityAccess, getAvailabilityHandler);
 
 /**
  * @openapi
@@ -133,6 +165,16 @@ availabilityRouter.get('/:userId/availability', getAvailabilityHandler);
  *       200:
  *         description: Availability check result
  */
-availabilityRouter.get('/:userId/availability/check', checkAvailability);
+availabilityRouter.get('/:userId/availability/check', ensureUserAvailabilityAccess, checkAvailability);
+availabilityRouter.delete(
+  '/:userId/availability/:availabilityId',
+  ensureUserAvailabilityAccess,
+  deleteAvailabilityHandler,
+);
+availabilityRouter.delete(
+  '/:userId/exceptions/:exceptionId',
+  ensureUserAvailabilityAccess,
+  deleteExceptionHandler,
+);
 
 export default availabilityRouter;

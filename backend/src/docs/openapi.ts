@@ -23,6 +23,7 @@ const swaggerOptions = {
             { name: 'Auth', description: 'Authentication endpoints' },
             { name: 'Users', description: 'User management endpoints' },
             { name: 'Locations', description: 'Location management endpoints' },
+            { name: 'Notifications', description: 'User notifications endpoints' },
         ],
         components: {
             securitySchemes: {

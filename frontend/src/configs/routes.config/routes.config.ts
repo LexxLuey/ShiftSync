@@ -12,6 +12,22 @@ export const protectedRoutes: Routes = {
     },
     '/schedule': {
         key: 'schedule',
+        authority: ['ADMIN', 'MANAGER', 'STAFF'],
+        meta: {
+            pageBackgroundType: 'plain',
+            pageContainerType: 'contained',
+        },
+    },
+    '/event-templates': {
+        key: 'eventTemplates',
+        authority: ['ADMIN', 'MANAGER'],
+        meta: {
+            pageBackgroundType: 'plain',
+            pageContainerType: 'contained',
+        },
+    },
+    '/schedule-builder': {
+        key: 'scheduleBuilder',
         authority: ['ADMIN', 'MANAGER'],
         meta: {
             pageBackgroundType: 'plain',

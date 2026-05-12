@@ -4,10 +4,12 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from '@/components/ui/toast'
 import useSocket from './useSocket'
+import { useAuth } from '@/context/AuthContext'
 
 export default function useSocketEvents() {
     const queryClient = useQueryClient()
-    const { socket } = useSocket()
+    const { token, isAuthenticated } = useAuth()
+    const { socket } = useSocket({ token: token ?? undefined, enabled: isAuthenticated })
 
     useEffect(() => {
         if (!socket) {

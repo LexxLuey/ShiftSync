@@ -1,5 +1,6 @@
 import { getSocket } from '../socket/index.js';
 import type { Shift, ShiftAssignment, SwapRequest, Location } from '@prisma/client';
+import type { NotificationRecord } from '../../modules/notifications/service.js';
 
 /**
  * Emit shift:created event to location room
@@ -10,10 +11,13 @@ export const emitShiftCreated = (shift: Shift & { location?: Location }): void =
         io.to(`location:${shift.locationId}`).emit('shift:created', {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
             requiredSkillId: shift.requiredSkillId,
             headcountNeeded: shift.headcountNeeded,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         });
@@ -34,10 +38,13 @@ export const emitShiftUpdated = (
         const payload = {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
             requiredSkillId: shift.requiredSkillId,
             headcountNeeded: shift.headcountNeeded,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         };
@@ -63,8 +70,11 @@ export const emitShiftPublished = (shift: Shift & { location?: Location }): void
         io.to(`location:${shift.locationId}`).emit('shift:published', {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         });
@@ -106,7 +116,7 @@ export const emitAssignmentChanged = (
  * Emit swap:created event to target user and location managers
  */
 export const emitSwapCreated = (
-    swapRequest: SwapRequest & { shift?: Shift; targetUser?: { id: string } },
+    swapRequest: SwapRequest & { shift?: Shift },
     managerIds: string[] = []
 ): void => {
     try {
@@ -196,6 +206,21 @@ export const emitConflictDetected = (
             message,
             timestamp: new Date(),
         });
+    } catch (error) {
+        // Socket.io not initialized; silently fail
+    }
+};
+
+/**
+ * Emit notification:created event to a specific user room
+ */
+export const emitNotificationCreated = (
+    userId: string,
+    notification: NotificationRecord
+): void => {
+    try {
+        const io = getSocket();
+        io.to(`user:${userId}`).emit('notification:created', notification);
     } catch (error) {
         // Socket.io not initialized; silently fail
     }

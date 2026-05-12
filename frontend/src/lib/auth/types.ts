@@ -34,7 +34,7 @@ export const getRoleHomePath = (role?: AppRole | null): string => {
     }
 
     if (role === 'STAFF') {
-        return '/shifts'
+        return '/schedule'
     }
 
     return '/home'

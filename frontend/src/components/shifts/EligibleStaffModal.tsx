@@ -12,6 +12,8 @@ type EligibleStaffModalProps = {
     shiftId: string
     shiftStartTime?: string
     shiftLocation?: string
+    fairnessStartDate?: string
+    fairnessEndDate?: string
     onAssignmentSuccess?: () => void
 }
 
@@ -23,6 +25,8 @@ export default function EligibleStaffModal({
     shiftId,
     shiftStartTime,
     shiftLocation,
+    fairnessStartDate,
+    fairnessEndDate,
     onAssignmentSuccess,
 }: EligibleStaffModalProps) {
     const [phase, setPhase] = useState<ModalPhase>('list')
@@ -34,7 +38,15 @@ export default function EligibleStaffModal({
 
     // Fetch eligible staff
     const eligibleStaffQuery = getEligibleStaffQuery(
-        isOpen ? { shiftId, limit: 50, search: searchQuery } : null,
+        isOpen
+            ? {
+                  shiftId,
+                  limit: 50,
+                  search: searchQuery,
+                  ...(fairnessStartDate ? { fairnessStartDate } : {}),
+                  ...(fairnessEndDate ? { fairnessEndDate } : {}),
+              }
+            : null,
     )
 
     // Filter staff based on search (client-side for instant feedback)
