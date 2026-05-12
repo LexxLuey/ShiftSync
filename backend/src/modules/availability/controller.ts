@@ -1,6 +1,13 @@
 import type { Request, Response, NextFunction } from 'express';
 import { validateSchema } from '../../lib/validation/index.js';
-import { createAvailability, createException, getAvailability, isUserAvailableAtTime } from './service.js';
+import {
+  createAvailability,
+  createException,
+  deleteAvailability,
+  deleteException,
+  getAvailability,
+  isUserAvailableAtTime,
+} from './service.js';
 import { createAvailabilitySchema, createExceptionSchema } from './validation.js';
 
 export const postAvailability = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
@@ -80,6 +87,36 @@ export const checkAvailability = async (request: Request, response: Response, ne
     const result = await isUserAvailableAtTime(userId, datetime, durationMinutes, typeof locationId === 'string' ? locationId : undefined);
 
     response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteAvailabilityHandler = async (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { userId, availabilityId } = request.params as { userId: string; availabilityId: string };
+    const availability = await deleteAvailability(userId, availabilityId);
+
+    response.status(200).json(availability);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteExceptionHandler = async (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { userId, exceptionId } = request.params as { userId: string; exceptionId: string };
+    const exception = await deleteException(userId, exceptionId);
+
+    response.status(200).json(exception);
   } catch (error) {
     next(error);
   }

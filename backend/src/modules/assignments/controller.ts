@@ -12,12 +12,47 @@ import {
   createAssignmentSchema,
   overrideAssignmentSchema,
   bulkAssignmentSchema,
+  eligibleStaffQuerySchema,
 } from './validation.js';
+import prismaClient from '../../lib/db/prisma.js';
+import { ForbiddenError } from '../../lib/errors/customErrors.js';
 import type {
   CreateAssignmentPayload,
   OverrideAssignmentPayload,
   BulkAssignmentPayload,
 } from './validation.js';
+
+const ensureManagerCanAccessShift = async (
+  actor: { id: string; role: string } | undefined,
+  shiftId: string,
+): Promise<void> => {
+  if (!actor || actor.role !== 'MANAGER') {
+    return;
+  }
+
+  const shift = await prismaClient.shift.findUnique({
+    where: { id: shiftId },
+    select: { locationId: true },
+  });
+
+  if (!shift) {
+    return;
+  }
+
+  const managerAccess = await prismaClient.locationManager.findUnique({
+    where: {
+      locationId_userId: {
+        locationId: shift.locationId,
+        userId: actor.id,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!managerAccess) {
+    throw new ForbiddenError('You do not have access to this location');
+  }
+};
 
 /**
  * POST /shifts/:shiftId/assignments
@@ -98,11 +133,14 @@ export const getEligibleStaffHandler = async (
 ): Promise<void> => {
   try {
     const { shiftId } = request.params as { shiftId: string };
-    const { limit = '20', search } = request.query;
+    const query = validateSchema(eligibleStaffQuerySchema, request.query);
 
-    const limitNum = Math.min(100, parseInt(limit as string, 10) || 20);
-
-    const staff = await getEligibleStaff(shiftId, limitNum, search as string | undefined);
+    const staff = await getEligibleStaff(shiftId, {
+      limit: query.limit,
+      ...(query.search ? { search: query.search } : {}),
+      ...(query.fairnessStartDate ? { fairnessStartDate: query.fairnessStartDate } : {}),
+      ...(query.fairnessEndDate ? { fairnessEndDate: query.fairnessEndDate } : {}),
+    });
 
     response.status(200).json({
       success: true,
@@ -181,6 +219,7 @@ export const postAssignmentOverride = async (
     const payload = validateSchema(overrideAssignmentSchema, request.body);
     const { shiftId } = request.body as { shiftId: string };
     const userRole = (request as any).user?.role as string;
+    const actor = request.user as { id: string; role: string } | undefined;
 
     if (!shiftId) {
       response.status(400).json({
@@ -189,6 +228,8 @@ export const postAssignmentOverride = async (
       });
       return;
     }
+
+    await ensureManagerCanAccessShift(actor, shiftId);
 
     const assignment = await executeWithLock(`user:${payload.userId}:lock`, async () => {
       return await createAssignmentWithOverride(shiftId, payload, userRole);

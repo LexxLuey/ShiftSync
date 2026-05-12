@@ -4,6 +4,7 @@ import type {
     UpdateShiftPayload,
     GetShiftsByLocationParams,
     Shift,
+    PublishShiftResponse,
 } from './types'
 
 type ShiftListResponse = {
@@ -37,7 +38,7 @@ export const shiftService = {
         return apiClient.del<Shift>(`/shifts/${id}`)
     },
     publishShift(id: string) {
-        return apiClient.post<Shift, Record<string, never>>(
+        return apiClient.post<PublishShiftResponse, Record<string, never>>(
             `/shifts/${id}/publish`,
             {},
         )

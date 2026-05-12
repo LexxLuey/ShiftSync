@@ -1,9 +1,10 @@
 # ShiftSync - Restaurant Shift Management System
 
 **Production URLs:**
-- **Frontend (UI):** https://shiftsyncapi.onrender.com
-- **Backend (API):** https://shiftsyncbackend.onrender.com
-- **GitHub Repository:** https://github.com/LexxLuey/ShiftSync.git
+
+- **Frontend (UI):** <https://shiftsyncapi.onrender.com>
+- **Backend (API):** <https://shiftsyncbackend.onrender.com>
+- **GitHub Repository:** <https://github.com/LexxLuey/ShiftSync.git>
 
 ---
 
@@ -27,6 +28,7 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 ## 🛠️ Tech Stack
 
 ### Backend
+
 - **Runtime:** Node.js with Express.js
 - **Language:** TypeScript
 - **Database:** PostgreSQL with Prisma ORM
@@ -38,11 +40,12 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 - **API Documentation:** Swagger/OpenAPI
 
 ### Frontend
+
 - **Framework:** Next.js 15.1.4 (App Router)
 - **Language:** TypeScript
 - **UI Library:** React 19
 - **Styling:** Tailwind CSS
-- **State Management:** 
+- **State Management:**
   - Server State: TanStack React Query
   - Client State: Zustand
 - **Forms:** React Hook Form + Zod
@@ -52,6 +55,7 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 - **Notifications:** Sonner (toast notifications)
 
 ### Infrastructure
+
 - **Backend Hosting:** Render
 - **Frontend Hosting:** Render (Static Site)
 - **Database:** Render PostgreSQL
@@ -71,18 +75,21 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 ### Backend Setup
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/LexxLuey/ShiftSync.git
    cd ShiftSync/backend
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 3. **Configure environment variables:**
    Create a `.env` file in the `backend` directory:
+
    ```env
    # Database
    DATABASE_URL="postgresql://username:password@localhost:5432/shiftsync"
@@ -103,6 +110,7 @@ ShiftSync is a comprehensive shift management system designed for multi-location
    ```
 
 4. **Setup database:**
+
    ```bash
    # Generate Prisma client
    npm run prisma:generate
@@ -115,34 +123,41 @@ ShiftSync is a comprehensive shift management system designed for multi-location
    ```
 
 5. **Start development server:**
+
    ```bash
    npm run dev
    ```
+
    Backend will run on `http://localhost:5000`
 
 ### Frontend Setup
 
 1. **Navigate to frontend directory:**
+
    ```bash
    cd ../frontend
    ```
 
 2. **Install dependencies:**
+
    ```bash
    npm install
    ```
 
 3. **Configure environment variables:**
    Create a `.env.local` file in the `frontend` directory:
+
    ```env
    NEXT_PUBLIC_API_BASE_URL="http://localhost:5000"
    NEXT_PUBLIC_WS_URL="http://localhost:5000"
    ```
 
 4. **Start development server:**
+
    ```bash
    npm run dev
    ```
+
    Frontend will run on `http://localhost:3000`
 
 ---
@@ -186,11 +201,13 @@ ShiftSync is a comprehensive shift management system designed for multi-location
    - Use Render-provided DATABASE_URL and REDIS_URL
 
 3. **Run Database Migration:**
+
    ```bash
    npx prisma migrate deploy
    ```
 
 4. **Seed Database (Optional):**
+
    ```bash
    npm run seed
    ```
@@ -198,12 +215,14 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 ### Frontend Deployment (Render/Vercel)
 
 **For Render:**
+
 1. Create New Static Site
 2. Build Command: `npm install && npm run build`
 3. Publish Directory: `out` or `.next`
 4. Add environment variables
 
 **For Vercel:**
+
 1. Import project from GitHub
 2. Select `frontend` folder
 3. Add environment variables
@@ -279,10 +298,12 @@ ShiftSync/
 ## 📝 API Documentation
 
 When running locally, access Swagger documentation at:
-- **http://localhost:5000/api-docs**
+
+- **<http://localhost:5000/api-docs>**
 
 Production API docs:
-- **https://shiftsyncbackend.onrender.com/api-docs**
+
+- **<https://shiftsyncbackend.onrender.com/api-docs>**
 
 ---
 

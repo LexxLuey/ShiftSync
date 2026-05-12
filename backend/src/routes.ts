@@ -9,7 +9,11 @@ import availabilityRouter from './modules/availability/routes.js';
 import assignmentsRouter from './modules/assignments/routes.js';
 import reportsRouter from './modules/reports/routes.js';
 import notificationsRouter from './modules/notifications/routes.js';
-// If audit has routes, import here (middleware is not a router)
+import auditRouter from './modules/audit/routes.js';
+import eventTemplatesRouter from './modules/event-templates/routes.js';
+import schedulingRouter from './modules/scheduling/routes.js';
+import skillsRouter from './modules/skills/routes.js';
+import calendarRouter from './modules/calendar/routes.js';
 
 const mainRouter = Router();
 
@@ -26,6 +30,11 @@ mainRouter.use('/swap-requests', swapsRouter);
 mainRouter.use('/reports', reportsRouter);
 mainRouter.use('/shifts', reportsRouter);
 mainRouter.use('/notifications', notificationsRouter);
+mainRouter.use('/audit-logs', auditRouter);
+mainRouter.use('/event-templates', eventTemplatesRouter);
+mainRouter.use('/schedules', schedulingRouter);
+mainRouter.use('/skills', skillsRouter);
+mainRouter.use('/calendar', calendarRouter);
 // Add more as needed
 
 export default mainRouter;

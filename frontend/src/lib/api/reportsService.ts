@@ -9,7 +9,7 @@ export const reportsService = {
     },
 
     getProjection(shiftId: string, proposedUserId: string) {
-        return apiClient.get<ProjectionResult>('/reports/projection', {
+        return apiClient.get<ProjectionResult>(`/shifts/${shiftId}/projection`, {
             params: { proposedUserId },
         })
     },

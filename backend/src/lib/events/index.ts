@@ -11,10 +11,13 @@ export const emitShiftCreated = (shift: Shift & { location?: Location }): void =
         io.to(`location:${shift.locationId}`).emit('shift:created', {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
             requiredSkillId: shift.requiredSkillId,
             headcountNeeded: shift.headcountNeeded,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         });
@@ -35,10 +38,13 @@ export const emitShiftUpdated = (
         const payload = {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
             requiredSkillId: shift.requiredSkillId,
             headcountNeeded: shift.headcountNeeded,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         };
@@ -64,8 +70,11 @@ export const emitShiftPublished = (shift: Shift & { location?: Location }): void
         io.to(`location:${shift.locationId}`).emit('shift:published', {
             id: shift.id,
             locationId: shift.locationId,
+            title: shift.title,
             startTime: shift.startTime,
             endTime: shift.endTime,
+            isOptional: shift.isOptional,
+            eventInstanceId: shift.eventInstanceId,
             status: shift.status,
             publishedAt: shift.publishedAt,
         });

@@ -32,13 +32,27 @@ export type ShiftAssignment = {
 export type Shift = {
     id: string
     locationId: string
+    title: string
     startTime: string
     endTime: string
     requiredSkillId: string
     headcountNeeded: number
+    isOptional?: boolean
+    eventInstanceId?: string | null
     status: ShiftStatus
     publishedAt?: string | null
     assignments?: ShiftAssignment[]
+}
+
+export type PublishWarning = {
+    code: string
+    message: string
+    details?: Record<string, unknown>
+}
+
+export type PublishShiftResponse = Shift & {
+    hoursUntilDeadline?: number
+    warnings?: PublishWarning[]
 }
 
 export type GetShiftsByLocationParams = {
@@ -49,10 +63,13 @@ export type GetShiftsByLocationParams = {
 
 export type CreateShiftPayload = {
     locationId: string
+    title?: string
     startTime: string
     endTime: string
     requiredSkillId: string
     headcountNeeded: number
+    isOptional?: boolean
+    eventInstanceId?: string
 }
 
 export type UpdateShiftPayload = Partial<Omit<CreateShiftPayload, 'locationId'>>
@@ -122,12 +139,16 @@ export type EligibleStaffMember = {
     available: boolean
     warnings: AssignmentViolation[]
     availabilityIndicator: 'green' | 'yellow' | 'red'
+    assignmentCountInWindow: number
+    rank: number
 }
 
 export type GetEligibleStaffParams = {
     shiftId: string
     limit?: number
     search?: string
+    fairnessStartDate?: string
+    fairnessEndDate?: string
 }
 
 export type CreateAssignmentPayload = {
@@ -302,6 +323,8 @@ export type NotificationType =
     | 'shift:updated'
     | 'shift:cancelled'
     | 'shift:published'
+    | 'reminder:24h'
+    | 'reminder:2h'
     | 'swap:created'
     | 'swap:approved'
     | 'swap:rejected'
@@ -329,4 +352,147 @@ export type Location = {
     name: string
     address: string
     timezone: string
+}
+
+export type CalendarAssignmentUser = {
+    id: string
+    firstName: string
+    lastName: string
+    email: string
+    role: 'ADMIN' | 'MANAGER' | 'STAFF'
+}
+
+export type CalendarAssignment = {
+    id: string
+    userId: string
+    status: 'ASSIGNED' | 'PENDING_SWAP'
+    user: CalendarAssignmentUser
+}
+
+export type CalendarShift = {
+    id: string
+    locationId: string
+    title: string
+    startTime: string
+    endTime: string
+    requiredSkillId: string
+    headcountNeeded: number
+    isOptional: boolean
+    eventInstanceId?: string | null
+    status: ShiftStatus
+    publishedAt?: string | null
+    location: {
+        id: string
+        name: string
+        timezone: string
+    }
+    requiredSkill: Skill
+    assignments: CalendarAssignment[]
+}
+
+export type CalendarQuery = {
+    startDate: string
+    endDate: string
+    locationId?: string
+    title?: string
+    assignedUserId?: string
+    mine?: boolean
+}
+
+export type CalendarResponse = {
+    data: CalendarShift[]
+    count: number
+}
+
+export type EventTemplateScope = 'LOCATION' | 'MINISTRY'
+
+export type EventTemplateRequirement = {
+    id: string
+    requiredSkillId: string
+    headcountNeeded: number
+    isOptional: boolean
+    sortOrder: number
+    requiredSkill?: Skill
+}
+
+export type EventTemplate = {
+    id: string
+    title: string
+    description?: string | null
+    scope: EventTemplateScope
+    locationId?: string | null
+    dayOfWeek: number
+    startTimeLocal: string
+    endTimeLocal: string
+    timezone: string
+    isActive: boolean
+    requirements: EventTemplateRequirement[]
+    location?: {
+        id: string
+        name: string
+        timezone: string
+    } | null
+    createdAt: string
+    updatedAt: string
+}
+
+export type EventTemplateRequirementInput = {
+    requiredSkillId: string
+    headcountNeeded: number
+    isOptional?: boolean
+    sortOrder?: number
+}
+
+export type CreateEventTemplatePayload = {
+    title: string
+    description?: string
+    scope: EventTemplateScope
+    locationId?: string
+    dayOfWeek: number
+    startTimeLocal: string
+    endTimeLocal: string
+    requirements: EventTemplateRequirementInput[]
+}
+
+export type UpdateEventTemplatePayload = Partial<CreateEventTemplatePayload>
+
+export type GenerateScheduleRequest = {
+    startDate: string
+    endDate: string
+    locationIds?: string[]
+    templateIds?: string[]
+}
+
+export type GeneratedShiftSummary = {
+    shiftId: string
+    templateId: string
+    templateTitle: string
+    scope: EventTemplateScope
+    locationId: string
+    locationName: string
+    eventDate: string
+    eventInstanceId: string
+    requiredSkillId: string
+    headcountNeeded: number
+    isOptional: boolean
+    startTime: string
+    endTime: string
+}
+
+export type SkippedShiftSummary = Omit<GeneratedShiftSummary, 'shiftId'> & {
+    reason: 'already_exists'
+    existingShiftId: string
+}
+
+export type GenerateScheduleResponse = {
+    summary: {
+        createdCount: number
+        skippedCount: number
+        templatesProcessed: number
+        locationsProcessed: number
+        startDate: string
+        endDate: string
+    }
+    created: GeneratedShiftSummary[]
+    skipped: SkippedShiftSummary[]
 }

@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { authenticate, restrictTo } from '../auth/middleware.js';
+import { verifyAssignmentAccess, verifyShiftAccess } from '../auth/guards.js';
 import {
   postAssignment,
   deleteAssignmentHandler,
@@ -8,6 +10,7 @@ import {
 } from './controller.js';
 
 const assignmentsRouter = Router({ mergeParams: true });
+assignmentsRouter.use(authenticate);
 
 /**
  * @openapi
@@ -38,7 +41,12 @@ const assignmentsRouter = Router({ mergeParams: true });
  *       409:
  *         description: Lock conflict - user is being assigned by another operation
  */
-assignmentsRouter.post('/:shiftId/assignments', postAssignment);
+assignmentsRouter.post(
+  '/:shiftId/assignments',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyShiftAccess('shiftId'),
+  postAssignment,
+);
 
 /**
  * @openapi
@@ -60,7 +68,12 @@ assignmentsRouter.post('/:shiftId/assignments', postAssignment);
  *       409:
  *         description: Cannot remove within 48 hours of shift
  */
-assignmentsRouter.delete('/:assignmentId', deleteAssignmentHandler);
+assignmentsRouter.delete(
+  '/:assignmentId',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyAssignmentAccess('assignmentId'),
+  deleteAssignmentHandler,
+);
 
 /**
  * @openapi
@@ -88,7 +101,12 @@ assignmentsRouter.delete('/:assignmentId', deleteAssignmentHandler);
  *       200:
  *         description: List of eligible staff with availability and warnings
  */
-assignmentsRouter.get('/:shiftId/eligible-staff', getEligibleStaffHandler);
+assignmentsRouter.get(
+  '/:shiftId/eligible-staff',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyShiftAccess('shiftId'),
+  getEligibleStaffHandler,
+);
 
 /**
  * @openapi
@@ -117,7 +135,12 @@ assignmentsRouter.get('/:shiftId/eligible-staff', getEligibleStaffHandler);
  *       200:
  *         description: Bulk assignment summary with successes and failures
  */
-assignmentsRouter.post('/:shiftId/assignments/bulk', postBulkAssignment);
+assignmentsRouter.post(
+  '/:shiftId/assignments/bulk',
+  restrictTo('ADMIN', 'MANAGER'),
+  verifyShiftAccess('shiftId'),
+  postBulkAssignment,
+);
 
 /**
  * @openapi
@@ -146,6 +169,6 @@ assignmentsRouter.post('/:shiftId/assignments/bulk', postBulkAssignment);
  *       400:
  *         description: Hard constraints cannot be overridden
  */
-assignmentsRouter.post('/override', postAssignmentOverride);
+assignmentsRouter.post('/override', restrictTo('ADMIN', 'MANAGER'), postAssignmentOverride);
 
 export default assignmentsRouter;

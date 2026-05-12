@@ -1,15 +1,22 @@
 import { Router } from 'express'
+import { authenticate, restrictTo } from '../auth/middleware.js'
+import { verifyShiftVisibility } from '../auth/guards.js'
 import {
+    getSwapRequestsHandler,
     postSwapRequest,
+    postValidateSwapRequest,
+    getEligibleSwapTargetsHandler,
     postAcceptSwap,
     postRejectSwap,
     postApproveSwap,
-    postManagerRejectSwap,
     postCancelSwap,
     getCronExpireSwaps,
 } from './controller.js'
 
 const swapsRouter = Router({ mergeParams: true })
+swapsRouter.use(authenticate)
+
+swapsRouter.get('/', getSwapRequestsHandler)
 
 /**
  * @openapi
@@ -47,7 +54,9 @@ const swapsRouter = Router({ mergeParams: true })
  *       409:
  *         description: Conflict - already has pending swaps or lock held
  */
-swapsRouter.post('/:shiftId/swap-requests', postSwapRequest)
+swapsRouter.post('/:shiftId/swap-requests', verifyShiftVisibility('shiftId'), postSwapRequest)
+swapsRouter.post('/:shiftId/swap-requests/validate', verifyShiftVisibility('shiftId'), postValidateSwapRequest)
+swapsRouter.get('/:shiftId/eligible-swap-targets', verifyShiftVisibility('shiftId'), getEligibleSwapTargetsHandler)
 
 /**
  * @openapi
@@ -129,7 +138,7 @@ swapsRouter.post('/:id/reject', postRejectSwap)
  *       404:
  *         description: Swap request not found
  */
-swapsRouter.post('/:id/approve', postApproveSwap)
+swapsRouter.post('/:id/approve', restrictTo('ADMIN', 'MANAGER'), postApproveSwap)
 
 /**
  * @openapi
@@ -175,6 +184,6 @@ swapsRouter.post('/:id/cancel', postCancelSwap)
  *                     expired:
  *                       type: number
  */
-swapsRouter.get('/cron/expire-swaps', getCronExpireSwaps)
+swapsRouter.get('/cron/expire-swaps', restrictTo('ADMIN'), getCronExpireSwaps)
 
 export default swapsRouter

@@ -1,4 +1,5 @@
-import { randomUUID } from 'crypto';
+import type { Prisma, Notification } from '@prisma/client';
+import prismaClient from '../../lib/db/prisma.js';
 import { NotFoundError } from '../../lib/errors/customErrors.js';
 import { emitNotificationCreated } from '../../lib/events/index.js';
 
@@ -7,6 +8,8 @@ export type NotificationType =
   | 'shift:updated'
   | 'shift:cancelled'
   | 'shift:published'
+  | 'reminder:24h'
+  | 'reminder:2h'
   | 'swap:created'
   | 'swap:approved'
   | 'swap:rejected'
@@ -24,130 +27,188 @@ export type NotificationRecord = {
   createdAt: string;
 };
 
+type NotificationDbClient = Prisma.TransactionClient | typeof prismaClient;
+
 const MAX_NOTIFICATIONS_PER_USER = 200;
-const notificationStore = new Map<string, NotificationRecord[]>();
 
-const getUserBucket = (userId: string): NotificationRecord[] =>
-  notificationStore.get(userId) ?? [];
+const normalizeNotification = (notification: Notification): NotificationRecord => ({
+  id: notification.id,
+  userId: notification.userId,
+  type: notification.type as NotificationType,
+  message: notification.message,
+  ...(notification.relatedEntityId
+    ? { relatedEntityId: notification.relatedEntityId }
+    : {}),
+  ...(notification.relatedEntityType
+    ? { relatedEntityType: notification.relatedEntityType }
+    : {}),
+  isRead: notification.isRead,
+  createdAt: notification.createdAt.toISOString(),
+});
 
-const setUserBucket = (userId: string, notifications: NotificationRecord[]): void => {
-  notificationStore.set(userId, notifications);
+const trimOldNotifications = async (
+  dbClient: NotificationDbClient,
+  userId: string,
+): Promise<void> => {
+  const overflowRecords = await dbClient.notification.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    skip: MAX_NOTIFICATIONS_PER_USER,
+    select: { id: true },
+  });
+
+  if (overflowRecords.length === 0) {
+    return;
+  }
+
+  await dbClient.notification.deleteMany({
+    where: {
+      id: {
+        in: overflowRecords.map((record) => record.id),
+      },
+    },
+  });
 };
 
-const sortNewestFirst = (notifications: NotificationRecord[]): NotificationRecord[] =>
-  [...notifications].sort((a, b) =>
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-  );
+export const createNotification = async (
+  payload: {
+    userId: string;
+    type: NotificationType;
+    message: string;
+    relatedEntityId?: string;
+    relatedEntityType?: string;
+  },
+  dbClient: NotificationDbClient = prismaClient,
+): Promise<NotificationRecord> => {
+  const notification = await dbClient.notification.create({
+    data: {
+      userId: payload.userId,
+      type: payload.type,
+      message: payload.message,
+      ...(payload.relatedEntityId
+        ? { relatedEntityId: payload.relatedEntityId }
+        : {}),
+      ...(payload.relatedEntityType
+        ? { relatedEntityType: payload.relatedEntityType }
+        : {}),
+    },
+  });
 
-export const createNotification = (payload: {
-  userId: string;
-  type: NotificationType;
-  message: string;
-  relatedEntityId?: string;
-  relatedEntityType?: string;
-}): NotificationRecord => {
-  const notification: NotificationRecord = {
-    id: randomUUID(),
-    userId: payload.userId,
-    type: payload.type,
-    message: payload.message,
-    ...(payload.relatedEntityId
-      ? { relatedEntityId: payload.relatedEntityId }
-      : {}),
-    ...(payload.relatedEntityType
-      ? { relatedEntityType: payload.relatedEntityType }
-      : {}),
-    isRead: false,
-    createdAt: new Date().toISOString(),
-  };
+  await trimOldNotifications(dbClient, payload.userId);
 
-  const existing = getUserBucket(payload.userId);
-  const updated = sortNewestFirst([notification, ...existing]).slice(
-    0,
-    MAX_NOTIFICATIONS_PER_USER,
-  );
+  const normalized = normalizeNotification(notification);
+  emitNotificationCreated(payload.userId, normalized);
 
-  setUserBucket(payload.userId, updated);
-
-  emitNotificationCreated(payload.userId, notification);
-
-  return notification;
+  return normalized;
 };
 
-export const listNotifications = (params: {
+export const listNotifications = async (params: {
   userId: string;
   limit?: number;
   offset?: number;
   unreadOnly?: boolean;
-}): { data: NotificationRecord[]; count: number } => {
+}): Promise<{ data: NotificationRecord[]; count: number }> => {
   const limit = Math.max(1, Math.min(100, params.limit ?? 20));
   const offset = Math.max(0, params.offset ?? 0);
 
-  let records = sortNewestFirst(getUserBucket(params.userId));
-  if (params.unreadOnly) {
-    records = records.filter((item) => !item.isRead);
-  }
+  const whereClause = {
+    userId: params.userId,
+    ...(params.unreadOnly ? { isRead: false } : {}),
+  };
+
+  const [data, count] = await prismaClient.$transaction([
+    prismaClient.notification.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit,
+    }),
+    prismaClient.notification.count({
+      where: whereClause,
+    }),
+  ]);
 
   return {
-    data: records.slice(offset, offset + limit),
-    count: records.length,
+    data: data.map(normalizeNotification),
+    count,
   };
 };
 
-export const countUnreadNotifications = (userId: string): { count: number } => {
-  const count = getUserBucket(userId).filter((item) => !item.isRead).length;
+export const countUnreadNotifications = async (userId: string): Promise<{ count: number }> => {
+  const count = await prismaClient.notification.count({
+    where: {
+      userId,
+      isRead: false,
+    },
+  });
+
   return { count };
 };
 
-export const markNotificationRead = (
+export const markNotificationRead = async (
   userId: string,
   notificationId: string,
-): NotificationRecord => {
-  const records = getUserBucket(userId);
-  const index = records.findIndex((item) => item.id === notificationId);
+): Promise<NotificationRecord> => {
+  const existing = await prismaClient.notification.findFirst({
+    where: {
+      id: notificationId,
+      userId,
+    },
+  });
 
-  if (index === -1) {
+  if (!existing) {
     throw new NotFoundError('Notification not found', { notificationId });
   }
 
-  const updatedRecord: NotificationRecord = {
-    ...records[index]!,
-    isRead: true,
-  };
-
-  const updated = [...records];
-  updated[index] = updatedRecord;
-  setUserBucket(userId, updated);
-
-  return updatedRecord;
-};
-
-export const markAllNotificationsRead = (userId: string): { count: number } => {
-  const records = getUserBucket(userId);
-  const unreadCount = records.filter((item) => !item.isRead).length;
-
-  if (unreadCount === 0) {
-    return { count: 0 };
+  if (existing.isRead) {
+    return normalizeNotification(existing);
   }
 
-  const updated = records.map((item) => ({ ...item, isRead: true }));
-  setUserBucket(userId, updated);
+  const updated = await prismaClient.notification.update({
+    where: { id: notificationId },
+    data: {
+      isRead: true,
+      readAt: new Date(),
+    },
+  });
 
-  return { count: unreadCount };
+  return normalizeNotification(updated);
 };
 
-export const deleteNotification = (userId: string, notificationId: string): { id: string } => {
-  const records = getUserBucket(userId);
-  const exists = records.some((item) => item.id === notificationId);
+export const markAllNotificationsRead = async (userId: string): Promise<{ count: number }> => {
+  const result = await prismaClient.notification.updateMany({
+    where: {
+      userId,
+      isRead: false,
+    },
+    data: {
+      isRead: true,
+      readAt: new Date(),
+    },
+  });
 
-  if (!exists) {
+  return { count: result.count };
+};
+
+export const deleteNotification = async (
+  userId: string,
+  notificationId: string,
+): Promise<{ id: string }> => {
+  const existing = await prismaClient.notification.findFirst({
+    where: {
+      id: notificationId,
+      userId,
+    },
+    select: { id: true },
+  });
+
+  if (!existing) {
     throw new NotFoundError('Notification not found', { notificationId });
   }
 
-  setUserBucket(
-    userId,
-    records.filter((item) => item.id !== notificationId),
-  );
+  await prismaClient.notification.delete({
+    where: { id: notificationId },
+  });
 
   return { id: notificationId };
 };

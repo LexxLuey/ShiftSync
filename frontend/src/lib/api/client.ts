@@ -45,6 +45,19 @@ export const apiClient = {
             data: body,
         })
     },
+    patch<TResponse, TBody = Record<string, unknown>>(
+        url: string,
+        body: TBody,
+        config?: RequestConfig<TBody>,
+    ) {
+        return ApiService.fetchDataWithAxios<TResponse, TBody>({
+            ...config,
+            baseURL: getBackendBaseUrl(),
+            url,
+            method: 'patch',
+            data: body,
+        })
+    },
     del<TResponse>(url: string, config?: RequestConfig) {
         return ApiService.fetchDataWithAxios<TResponse>({
             ...config,

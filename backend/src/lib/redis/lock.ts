@@ -77,9 +77,10 @@ export const releaseLock = async (key: string): Promise<void> => {
  */
 export const executeWithLock = async <T>(
   key: string,
-  callback: () => Promise<T>
+  callback: () => Promise<T>,
+  ttl: number = 5,
 ): Promise<T> => {
-  await acquireLock(key);
+  await acquireLock(key, ttl);
   try {
     return await callback();
   } finally {

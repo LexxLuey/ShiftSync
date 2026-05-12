@@ -19,6 +19,7 @@ export type AuditAction =
 
 export type AuditEntity =
     | 'SHIFT'
+    | 'EVENT_TEMPLATE'
     | 'ASSIGNMENT'
     | 'SWAP_REQUEST'
     | 'USER'
@@ -146,4 +147,60 @@ export const getUserAuditLogs = async (
         },
         take: limit,
     });
+};
+
+export const listAuditLogs = async (params: {
+    startDate?: Date;
+    endDate?: Date;
+    entityType?: string;
+    action?: string;
+    userId?: string;
+    limit?: number;
+    offset?: number;
+}): Promise<{
+    data: Array<AuditLog & { user: { id: string; firstName: string; lastName: string; email: string } }>;
+    count: number;
+}> => {
+    const limit = Math.max(1, Math.min(200, params.limit ?? 50));
+    const offset = Math.max(0, params.offset ?? 0);
+
+    const whereClause = {
+        ...(params.startDate || params.endDate
+            ? {
+                createdAt: {
+                    ...(params.startDate ? { gte: params.startDate } : {}),
+                    ...(params.endDate ? { lte: params.endDate } : {}),
+                },
+            }
+            : {}),
+        ...(params.entityType ? { entityType: params.entityType } : {}),
+        ...(params.action ? { action: params.action } : {}),
+        ...(params.userId ? { userId: params.userId } : {}),
+    };
+
+    const [count, data] = await prismaClient.$transaction([
+        prismaClient.auditLog.count({
+            where: whereClause,
+        }),
+        prismaClient.auditLog.findMany({
+            where: whereClause,
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    },
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+            take: limit,
+            skip: offset,
+        }),
+    ]);
+
+    return { data, count };
 };

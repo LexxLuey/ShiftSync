@@ -35,6 +35,10 @@ export default function NotificationBell() {
                 return '❌'
             case 'shift:published':
                 return '📢'
+            case 'reminder:24h':
+                return '⏰'
+            case 'reminder:2h':
+                return '⏱️'
             case 'swap:created':
                 return '🔄'
             case 'swap:approved':

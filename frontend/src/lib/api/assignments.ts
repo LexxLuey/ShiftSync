@@ -10,13 +10,18 @@ export const assignmentService = {
     /**
      * Get list of eligible staff for a shift
      */
-    getEligibleStaff(params: GetEligibleStaffParams) {
+    async getEligibleStaff(params: GetEligibleStaffParams) {
         const { shiftId, ...query } = params
 
-        return apiClient.get<EligibleStaffMember[]>(
+        const response = await apiClient.get<{
+            success: boolean
+            data: EligibleStaffMember[]
+        }>(
             `/shifts/${shiftId}/eligible-staff`,
             { params: query },
         )
+
+        return response.data
     },
 
     /**

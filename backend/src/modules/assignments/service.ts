@@ -2,6 +2,10 @@ import prismaClient from '../../lib/db/prisma.js';
 import { ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../../lib/errors/customErrors.js';
 import { calculateDailyHours, calculateWeeklyHours, getConsecutiveDaysWorked } from '../../lib/validation/overtime.js';
 import { isUserAvailableAtTime } from '../availability/service.js';
+import {
+  cancelReminderJobsForAssignment,
+  syncReminderJobsForAssignment,
+} from '../reminders/service.js';
 import type { CreateAssignmentPayload, OverrideAssignmentPayload } from './validation.js';
 
 interface Violation {
@@ -363,28 +367,34 @@ export const validateShiftAssignment = async (
  * Create a new shift assignment
  */
 export const createAssignment = async (shiftId: string, payload: CreateAssignmentPayload) => {
-  const assignment = await prismaClient.shiftAssignment.create({
-    data: {
-      shiftId,
-      userId: payload.userId,
-      status: 'ASSIGNED',
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
+  const assignment = await prismaClient.$transaction(async (tx) => {
+    const createdAssignment = await tx.shiftAssignment.create({
+      data: {
+        shiftId,
+        userId: payload.userId,
+        status: 'ASSIGNED',
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+        shift: {
+          include: {
+            location: true,
+            requiredSkill: true,
+          },
         },
       },
-      shift: {
-        include: {
-          location: true,
-          requiredSkill: true,
-        },
-      },
-    },
+    });
+
+    await syncReminderJobsForAssignment(shiftId, payload.userId, tx);
+
+    return createdAssignment;
   });
 
   return assignment;
@@ -394,32 +404,36 @@ export const createAssignment = async (shiftId: string, payload: CreateAssignmen
  * Delete a shift assignment
  */
 export const deleteAssignment = async (assignmentId: string) => {
-  const assignment = await prismaClient.shiftAssignment.findUnique({
-    where: { id: assignmentId },
-    include: {
-      shift: true,
-    },
-  });
+  await prismaClient.$transaction(async (tx) => {
+    const assignment = await tx.shiftAssignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        shift: true,
+      },
+    });
 
-  if (!assignment) {
-    throw new NotFoundError('Assignment not found', { assignmentId });
-  }
-
-  // Check 48-hour rule
-  if (assignment.shift.status === 'PUBLISHED') {
-    const hoursUntilShift = (assignment.shift.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60);
-
-    if (hoursUntilShift < 48) {
-      throw new ConflictError(
-        'Cannot remove assignment within 48 hours of shift start time',
-        { assignmentId, hoursUntilShift },
-        ['Assignments must be removed at least 48 hours before shift start.']
-      );
+    if (!assignment) {
+      throw new NotFoundError('Assignment not found', { assignmentId });
     }
-  }
 
-  await prismaClient.shiftAssignment.delete({
-    where: { id: assignmentId },
+    // Check 48-hour rule
+    if (assignment.shift.status === 'PUBLISHED') {
+      const hoursUntilShift = (assignment.shift.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+
+      if (hoursUntilShift < 48) {
+        throw new ConflictError(
+          'Cannot remove assignment within 48 hours of shift start time',
+          { assignmentId, hoursUntilShift },
+          ['Assignments must be removed at least 48 hours before shift start.']
+        );
+      }
+    }
+
+    await tx.shiftAssignment.delete({
+      where: { id: assignmentId },
+    });
+
+    await cancelReminderJobsForAssignment(assignment.shiftId, assignment.userId, tx);
   });
 
   return { message: 'Assignment removed successfully' };
@@ -430,17 +444,27 @@ export const deleteAssignment = async (assignmentId: string) => {
  */
 export const getEligibleStaff = async (
   shiftId: string,
-  limit: number = 20,
-  search?: string
+  options?: {
+    limit?: number;
+    search?: string;
+    fairnessStartDate?: string;
+    fairnessEndDate?: string;
+  },
 ): Promise<
   Array<{
     userId: string;
     name: string;
+    role: string;
     available: boolean;
     warnings: Violation[];
-    message: string;
+    availabilityIndicator: 'green' | 'yellow' | 'red';
+    assignmentCountInWindow: number;
+    rank: number;
   }>
 > => {
+  const limit = options?.limit ?? 20;
+  const search = options?.search;
+
   const shift = await prismaClient.shift.findUnique({
     where: { id: shiftId },
     include: {
@@ -453,10 +477,34 @@ export const getEligibleStaff = async (
     throw new NotFoundError('Shift not found', { shiftId });
   }
 
-  // Get all staff with required skill and location certification
+  const fallbackWindowStart = new Date(
+    Date.UTC(shift.startTime.getUTCFullYear(), shift.startTime.getUTCMonth(), 1, 0, 0, 0, 0),
+  );
+  const fallbackWindowEnd = new Date(
+    Date.UTC(
+      shift.startTime.getUTCFullYear(),
+      shift.startTime.getUTCMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
+
+  const fairnessWindowStart = options?.fairnessStartDate
+    ? new Date(`${options.fairnessStartDate}T00:00:00.000Z`)
+    : fallbackWindowStart;
+  const fairnessWindowEnd = options?.fairnessEndDate
+    ? new Date(`${options.fairnessEndDate}T23:59:59.999Z`)
+    : fallbackWindowEnd;
+
+  // Candidate pool: MANAGER + STAFF with required skill and center certification.
   const staff = await prismaClient.user.findMany({
     where: {
-      role: 'STAFF',
+      role: {
+        in: ['MANAGER', 'STAFF'],
+      },
       skills: {
         some: {
           skillId: shift.requiredSkillId,
@@ -476,28 +524,80 @@ export const getEligibleStaff = async (
         ],
       }),
     },
-    take: limit,
   });
 
+  const candidateIds = staff.map((user) => user.id);
+  const fairnessCounts =
+    candidateIds.length > 0
+      ? await prismaClient.shiftAssignment.groupBy({
+          by: ['userId'],
+          where: {
+            userId: {
+              in: candidateIds,
+            },
+            shift: {
+              locationId: shift.locationId,
+              requiredSkillId: shift.requiredSkillId,
+              startTime: {
+                gte: fairnessWindowStart,
+                lte: fairnessWindowEnd,
+              },
+            },
+          },
+          _count: {
+            userId: true,
+          },
+        })
+      : [];
+
+  const assignmentCountByUserId = new Map(
+    fairnessCounts.map((row) => [row.userId, row._count.userId]),
+  );
+
   // Validate each staff member
-  const eligibleStaff = await Promise.all(
+  const rankedCandidates = await Promise.all(
     staff.map(async (user) => {
       const validation = await validateShiftAssignment(shiftId, user.id);
+      const availabilityIndicator: 'green' | 'yellow' | 'red' = validation.violations.some(
+        (v) => v.severity === 'error',
+      )
+        ? 'red'
+        : validation.violations.some((v) => v.severity === 'warning')
+          ? 'yellow'
+          : 'green';
 
       return {
         userId: user.id,
         name: `${user.firstName} ${user.lastName}`,
+        role: user.role,
         available: validation.valid,
         warnings: validation.violations,
-        message: validation.valid
-          ? 'Available and qualified'
-          : validation.violations.find((v) => v.severity === 'error')?.message ||
-            'Not available',
+        availabilityIndicator,
+        assignmentCountInWindow: assignmentCountByUserId.get(user.id) ?? 0,
       };
     })
   );
 
-  return eligibleStaff;
+  const sortedCandidates = rankedCandidates.sort((firstCandidate, secondCandidate) => {
+    if (firstCandidate.available !== secondCandidate.available) {
+      return firstCandidate.available ? -1 : 1;
+    }
+
+    if (firstCandidate.assignmentCountInWindow !== secondCandidate.assignmentCountInWindow) {
+      return firstCandidate.assignmentCountInWindow - secondCandidate.assignmentCountInWindow;
+    }
+
+    if (firstCandidate.warnings.length !== secondCandidate.warnings.length) {
+      return firstCandidate.warnings.length - secondCandidate.warnings.length;
+    }
+
+    return firstCandidate.name.localeCompare(secondCandidate.name);
+  });
+
+  return sortedCandidates.slice(0, limit).map((candidate, index) => ({
+    ...candidate,
+    rank: index + 1,
+  }));
 };
 
 /**

@@ -3,7 +3,12 @@ import { NotFoundError, ValidationError, ForbiddenError } from '../../lib/errors
 import { isUserAvailableAtTime } from '../availability/service.js'
 import { emitSwapCreated, emitSwapUpdated } from '../../lib/events/index.js';
 import { createNotification } from '../notifications/service.js';
+import {
+    cancelReminderJobsForAssignment,
+    syncReminderJobsForAssignment,
+} from '../reminders/service.js';
 import type { CreateSwapRequestPayload, ApproveSwapRequestPayload } from './validation.js'
+import type { Role } from '@prisma/client';
 
 export interface Violation {
     type: string
@@ -15,6 +20,19 @@ export interface Violation {
 export interface ValidateSwapResult {
     valid: boolean
     violations: Violation[]
+}
+
+type SwapListActor = {
+    id: string
+    role: Role
+}
+
+type ListSwapRequestsParams = {
+    status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
+    limit?: number
+    offset?: number
+    locationId?: string
+    userId?: string
 }
 
 /**
@@ -166,6 +184,245 @@ export const countPendingSwaps = async (userId: string): Promise<number> => {
     return count
 }
 
+export const listSwapRequests = async (
+    params: ListSwapRequestsParams,
+    actor: SwapListActor,
+): Promise<{ data: unknown[]; total: number; hasMore: boolean }> => {
+    const limit = Math.max(1, Math.min(100, params.limit ?? 20))
+    const offset = Math.max(0, params.offset ?? 0)
+    const whereClause: Record<string, unknown> = {
+        ...(params.status ? { status: params.status } : {}),
+    }
+
+    if (actor.role === 'MANAGER') {
+        const managedLocations = await prismaClient.locationManager.findMany({
+            where: { userId: actor.id },
+            select: { locationId: true },
+        })
+        const managedLocationIds = managedLocations.map((item) => item.locationId)
+
+        if (managedLocationIds.length === 0) {
+            return { data: [], total: 0, hasMore: false }
+        }
+
+        const scopedLocationIds = params.locationId
+            ? managedLocationIds.includes(params.locationId)
+                ? [params.locationId]
+                : []
+            : managedLocationIds
+
+        if (scopedLocationIds.length === 0) {
+            return { data: [], total: 0, hasMore: false }
+        }
+
+        whereClause.shift = {
+            locationId: { in: scopedLocationIds },
+        }
+    } else if (actor.role === 'STAFF') {
+        const certifications = await prismaClient.certification.findMany({
+            where: {
+                userId: actor.id,
+                revokedAt: null,
+            },
+            select: { locationId: true },
+        })
+        const certifiedLocationIds = certifications.map((item) => item.locationId)
+
+        if (certifiedLocationIds.length === 0) {
+            return { data: [], total: 0, hasMore: false }
+        }
+
+        const scopedLocationIds = params.locationId
+            ? certifiedLocationIds.includes(params.locationId)
+                ? [params.locationId]
+                : []
+            : certifiedLocationIds
+
+        if (scopedLocationIds.length === 0) {
+            return { data: [], total: 0, hasMore: false }
+        }
+
+        whereClause.AND = [
+            {
+                shift: {
+                    locationId: { in: scopedLocationIds },
+                },
+            },
+            {
+                OR: [
+                    { requestingUserId: actor.id },
+                    { targetUserId: actor.id },
+                    { type: 'DROP', status: 'PENDING' },
+                ],
+            },
+        ]
+    } else if (params.locationId) {
+        whereClause.shift = {
+            locationId: params.locationId,
+        }
+    }
+
+    if (params.userId && actor.role !== 'STAFF') {
+        whereClause.OR = [
+            { requestingUserId: params.userId },
+            { targetUserId: params.userId },
+        ]
+    }
+
+    const [total, data] = await prismaClient.$transaction([
+        prismaClient.swapRequest.count({ where: whereClause as any }),
+        prismaClient.swapRequest.findMany({
+            where: whereClause as any,
+            include: {
+                requestingUser: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    },
+                },
+                targetUser: {
+                    select: {
+                        id: true,
+                        firstName: true,
+                        lastName: true,
+                        email: true,
+                    },
+                },
+                shift: {
+                    include: {
+                        location: {
+                            select: {
+                                id: true,
+                                name: true,
+                                timezone: true,
+                            },
+                        },
+                        requiredSkill: {
+                            select: {
+                                id: true,
+                                name: true,
+                            },
+                        },
+                    },
+                },
+            },
+            orderBy: { createdAt: 'desc' },
+            skip: offset,
+            take: limit,
+        }),
+    ])
+
+    return {
+        data,
+        total,
+        hasMore: offset + data.length < total,
+    }
+}
+
+export const getEligibleSwapTargets = async (
+    shiftId: string,
+    requestingUserId: string,
+    limit: number = 20,
+    search?: string,
+): Promise<
+    Array<{
+        userId: string
+        firstName: string
+        lastName: string
+        email: string
+        available: boolean
+        warnings?: Violation[]
+    }>
+> => {
+    const shift = await prismaClient.shift.findUnique({
+        where: { id: shiftId },
+        include: {
+            assignments: {
+                select: {
+                    userId: true,
+                },
+            },
+        },
+    })
+
+    if (!shift) {
+        throw new NotFoundError(`Shift ${shiftId} not found`)
+    }
+
+    const requesterAssignment = await prismaClient.shiftAssignment.findUnique({
+        where: {
+            shiftId_userId: {
+                shiftId,
+                userId: requestingUserId,
+            },
+        },
+        select: { id: true },
+    })
+
+    if (!requesterAssignment) {
+        throw new ForbiddenError('Only assigned users can request swap targets')
+    }
+
+    const assignedUserIds = shift.assignments.map((assignment) => assignment.userId)
+    const candidateUsers = await prismaClient.user.findMany({
+        where: {
+            id: {
+                notIn: [requestingUserId, ...assignedUserIds],
+            },
+            certifications: {
+                some: {
+                    locationId: shift.locationId,
+                    revokedAt: null,
+                },
+            },
+            skills: {
+                some: {
+                    skillId: shift.requiredSkillId,
+                },
+            },
+            ...(search
+                ? {
+                    OR: [
+                        { firstName: { contains: search, mode: 'insensitive' } },
+                        { lastName: { contains: search, mode: 'insensitive' } },
+                        { email: { contains: search, mode: 'insensitive' } },
+                    ],
+                }
+                : {}),
+        },
+        select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+        },
+        orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        take: Math.max(1, Math.min(100, limit)),
+    })
+
+    return await Promise.all(
+        candidateUsers.map(async (candidate) => {
+            const validation = await validateSwapRequest(
+                shiftId,
+                requestingUserId,
+                'SWAP',
+                candidate.id,
+            )
+
+            return {
+                userId: candidate.id,
+                firstName: candidate.firstName,
+                lastName: candidate.lastName,
+                email: candidate.email,
+                available: validation.valid,
+                warnings: validation.violations,
+            }
+        }),
+    )
+}
+
 /**
  * Create swap request
  */
@@ -214,7 +471,7 @@ export const createSwapRequest = async (
     emitSwapCreated(swapRequest);
 
     if (swapRequest.targetUserId) {
-        createNotification({
+        await createNotification({
             userId: swapRequest.targetUserId,
             type: 'swap:created',
             message: `${swapRequest.requestingUser.firstName} requested a shift swap with you`,
@@ -315,7 +572,7 @@ export const rejectSwapRequest = async (swapRequestId: string, userId: string) =
     emitSwapUpdated(updated);
 
     if (updated.requestingUserId !== userId) {
-        createNotification({
+        await createNotification({
             userId: updated.requestingUserId,
             type: 'swap:rejected',
             message: 'Your swap request was rejected.',
@@ -325,7 +582,7 @@ export const rejectSwapRequest = async (swapRequestId: string, userId: string) =
     }
 
     if (updated.targetUserId && updated.targetUserId !== userId) {
-        createNotification({
+        await createNotification({
             userId: updated.targetUserId,
             type: 'swap:rejected',
             message: 'A swap request involving you was rejected.',
@@ -375,83 +632,97 @@ export const approveSwapRequest = async (
         throw new ValidationError(`Swap request is already ${swapRequest.status}`)
     }
 
-    // Perform swap or drop
-    if (swapRequest.type === 'SWAP') {
-        // Delete requester's assignment, create target's assignment
-        await prismaClient.$transaction([
-            // Remove requester
-            prismaClient.shiftAssignment.delete({
+    const updated = await prismaClient.$transaction(async (tx) => {
+        // Perform swap or drop
+        if (swapRequest.type === 'SWAP') {
+            await tx.shiftAssignment.delete({
                 where: {
                     shiftId_userId: {
                         shiftId: swapRequest.shiftId,
                         userId: swapRequest.requestingUserId,
                     },
                 },
-            }),
+            })
 
-            // Add target (should be safe per validation)
-            prismaClient.shiftAssignment.create({
+            await tx.shiftAssignment.create({
                 data: {
                     shiftId: swapRequest.shiftId,
                     userId: swapRequest.targetUserId!,
                     status: 'ASSIGNED',
                 },
-            }),
+            })
 
-            // Update swap status
-            prismaClient.swapRequest.update({
+            await tx.swapRequest.update({
                 where: { id: swapRequestId },
                 data: { status: 'APPROVED' },
-            }),
-        ])
-    } else {
-        // DROP: just remove requester's assignment
-        await prismaClient.$transaction([
-            prismaClient.shiftAssignment.delete({
+            })
+
+            await cancelReminderJobsForAssignment(
+                swapRequest.shiftId,
+                swapRequest.requestingUserId,
+                tx,
+            )
+            await syncReminderJobsForAssignment(
+                swapRequest.shiftId,
+                swapRequest.targetUserId!,
+                tx,
+            )
+        } else {
+            await tx.shiftAssignment.delete({
                 where: {
                     shiftId_userId: {
                         shiftId: swapRequest.shiftId,
                         userId: swapRequest.requestingUserId,
                     },
                 },
-            }),
+            })
 
-            prismaClient.swapRequest.update({
+            await tx.swapRequest.update({
                 where: { id: swapRequestId },
                 data: { status: 'APPROVED' },
-            }),
-        ])
-    }
+            })
 
-    const updated = await prismaClient.swapRequest.findUnique({
-        where: { id: swapRequestId },
-        include: {
-            shift: { include: { location: true } },
-            requestingUser: true,
-            targetUser: true,
-        },
+            await cancelReminderJobsForAssignment(
+                swapRequest.shiftId,
+                swapRequest.requestingUserId,
+                tx,
+            )
+        }
+
+        const refreshed = await tx.swapRequest.findUnique({
+            where: { id: swapRequestId },
+            include: {
+                shift: { include: { location: true } },
+                requestingUser: true,
+                targetUser: true,
+            },
+        })
+
+        if (!refreshed) {
+            throw new NotFoundError(`Swap request ${swapRequestId} not found after approval`)
+        }
+
+        return refreshed
     })
 
-    if (updated) {
-        emitSwapUpdated(updated);
+    emitSwapUpdated(updated);
 
-        createNotification({
-            userId: updated.requestingUserId,
+    await createNotification({
+        userId: updated.requestingUserId,
+        type: 'swap:approved',
+        message: 'Your swap request was approved.',
+        relatedEntityId: updated.id,
+        relatedEntityType: 'SWAP_REQUEST',
+    });
+
+    if (updated.targetUserId) {
+        await createNotification({
+            userId: updated.targetUserId,
             type: 'swap:approved',
-            message: 'Your swap request was approved.',
+            message: 'A swap request involving you was approved.',
             relatedEntityId: updated.id,
             relatedEntityType: 'SWAP_REQUEST',
         });
-
-        if (updated.targetUserId) {
-            createNotification({
-                userId: updated.targetUserId,
-                type: 'swap:approved',
-                message: 'A swap request involving you was approved.',
-                relatedEntityId: updated.id,
-                relatedEntityType: 'SWAP_REQUEST',
-            });
-        }
     }
 
     return updated
@@ -491,7 +762,7 @@ export const cancelSwapRequest = async (swapRequestId: string, requesterId: stri
 
     emitSwapUpdated(updated);
 
-    createNotification({
+    await createNotification({
         userId: updated.requestingUserId,
         type: 'swap:rejected',
         message: 'You cancelled your swap request.',
@@ -500,7 +771,7 @@ export const cancelSwapRequest = async (swapRequestId: string, requesterId: stri
     });
 
     if (updated.targetUserId) {
-        createNotification({
+        await createNotification({
             userId: updated.targetUserId,
             type: 'swap:rejected',
             message: 'A pending swap request involving you was cancelled.',

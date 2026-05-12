@@ -18,11 +18,11 @@ const getActorId = (request: Request): string => {
   return userId;
 };
 
-export const getNotifications = (
+export const getNotifications = async (
   request: Request,
   response: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const userId = getActorId(request);
     const parsedLimit = request.query.limit ? Number(request.query.limit) : undefined;
@@ -39,7 +39,7 @@ export const getNotifications = (
       ...(offset !== undefined ? { offset } : {}),
     };
 
-    const result = listNotifications(queryParams);
+    const result = await listNotifications(queryParams);
 
     response.status(200).json(result);
   } catch (error) {
@@ -47,14 +47,14 @@ export const getNotifications = (
   }
 };
 
-export const getUnreadCount = (
+export const getUnreadCount = async (
   request: Request,
   response: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const userId = getActorId(request);
-    const result = countUnreadNotifications(userId);
+    const result = await countUnreadNotifications(userId);
 
     response.status(200).json(result);
   } catch (error) {
@@ -62,47 +62,11 @@ export const getUnreadCount = (
   }
 };
 
-export const patchMarkRead = (
+export const patchMarkRead = async (
   request: Request,
   response: Response,
   next: NextFunction,
-): void => {
-  try {
-    const userId = getActorId(request);
-    const notificationId = String(request.params.id || '');
-
-    if (!notificationId) {
-      throw new ValidationError('Notification id is required');
-    }
-
-    const result = markNotificationRead(userId, notificationId);
-
-    response.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const patchMarkAllRead = (
-  request: Request,
-  response: Response,
-  next: NextFunction,
-): void => {
-  try {
-    const userId = getActorId(request);
-    const result = markAllNotificationsRead(userId);
-
-    response.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const deleteNotificationById = (
-  request: Request,
-  response: Response,
-  next: NextFunction,
-): void => {
+): Promise<void> => {
   try {
     const userId = getActorId(request);
     const notificationId = String(request.params.id || '');
@@ -111,7 +75,43 @@ export const deleteNotificationById = (
       throw new ValidationError('Notification id is required');
     }
 
-    const result = deleteNotification(userId, notificationId);
+    const result = await markNotificationRead(userId, notificationId);
+
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const patchMarkAllRead = async (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = getActorId(request);
+    const result = await markAllNotificationsRead(userId);
+
+    response.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteNotificationById = async (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const userId = getActorId(request);
+    const notificationId = String(request.params.id || '');
+
+    if (!notificationId) {
+      throw new ValidationError('Notification id is required');
+    }
+
+    const result = await deleteNotification(userId, notificationId);
 
     response.status(200).json(result);
   } catch (error) {

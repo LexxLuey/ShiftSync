@@ -40,7 +40,7 @@ reportsRouter.get(
  * Query: proposedUserId (required)
  */
 reportsRouter.get(
-  '/projection',
+  '/:shiftId/projection',
   authenticate,
   restrictTo('ADMIN', 'MANAGER'),
   getProjectionHandler

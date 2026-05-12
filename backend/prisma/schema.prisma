@@ -41,92 +41,119 @@ enum SwapStatus {
   EXPIRED
 }
 
+enum EventTemplateScope {
+  LOCATION
+  MINISTRY
+}
+
+enum ReminderChannel {
+  IN_APP
+  EMAIL
+}
+
+enum ReminderWindow {
+  H24
+  H2
+}
+
+enum ReminderJobStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
 model User {
-  id                  String            @id @default(uuid())
-  email               String            @unique
-  password            String
-  firstName           String
-  lastName            String
-  role                Role
-  phone               String?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  managerLocations    LocationManager[]
-  certifications      Certification[]
-  skills              UserSkill[]
-  availability        Availability[]
-  exceptions          Exception[]
-  shifts              ShiftAssignment[]
-  swapRequests        SwapRequest[]     @relation("SwapRequestRequester")
-  swapTargets         SwapRequest[]     @relation("SwapRequestTarget")
-  auditLogs           AuditLog[]
+  id                    String            @id @default(uuid())
+  email                 String            @unique
+  password              String
+  firstName             String
+  lastName              String
+  role                  Role
+  phone                 String?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  managerLocations      LocationManager[]
+  certifications        Certification[]
+  skills                UserSkill[]
+  availability          Availability[]
+  exceptions            Exception[]
+  shifts                ShiftAssignment[]
+  swapRequests          SwapRequest[]     @relation("SwapRequestRequester")
+  swapTargets           SwapRequest[]     @relation("SwapRequestTarget")
+  auditLogs             AuditLog[]
+  notifications         Notification[]
+  createdEventTemplates EventTemplate[]   @relation("EventTemplateCreator")
+  reminderJobs          ReminderJob[]
 }
 
 model Location {
-  id               String            @id @default(uuid())
-  name             String
-  address          String
-  timezone         String
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  managers         LocationManager[]
-  shifts           Shift[]
-  certifications   Certification[]
-  availability     Availability[]
+  id             String            @id @default(uuid())
+  name           String
+  address        String
+  timezone       String
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  managers       LocationManager[]
+  shifts         Shift[]
+  certifications Certification[]
+  availability   Availability[]
+  eventTemplates EventTemplate[]
 }
 
 model Skill {
-  id          String      @id @default(uuid())
-  name        String      @unique
-  users       UserSkill[]
-  shifts      Shift[]
+  id                   String                     @id @default(uuid())
+  name                 String                     @unique
+  users                UserSkill[]
+  shifts               Shift[]
+  templateRequirements EventTemplateRequirement[]
 }
 
 model Certification {
-  id          String      @id @default(uuid())
-  userId      String
-  locationId  String
-  revokedAt   DateTime?
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  location    Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid())
+  userId     String
+  locationId String
+  revokedAt  DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location   Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@unique([userId, locationId])
   @@index([locationId, userId, revokedAt])
 }
 
 model UserSkill {
-  userId      String
-  skillId     String
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skill       Skill       @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  userId  String
+  skillId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([userId, skillId])
 }
 
 model Availability {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())
   userId      String
   dayOfWeek   Int
   startTime   String
   endTime     String
   locationId  String?
-  isRecurring Boolean     @default(true)
+  isRecurring Boolean   @default(true)
   validFrom   DateTime
   validTo     DateTime?
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  location    Location?   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location    Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 
   @@index([userId, dayOfWeek])
   @@index([locationId])
 }
 
 model Exception {
-  id          String      @id @default(uuid())
-  userId      String
-  date        DateTime
-  startTime   String?
-  endTime     String?
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime
+  startTime String?
+  endTime   String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, date])
 }
@@ -134,10 +161,13 @@ model Exception {
 model Shift {
   id              String            @id @default(uuid())
   locationId      String
+  title           String
   startTime       DateTime
   endTime         DateTime
   requiredSkillId String
   headcountNeeded Int               @default(1)
+  isOptional      Boolean           @default(false)
+  eventInstanceId String?
   status          ShiftStatus       @default(DRAFT)
   publishedAt     DateTime?
   createdAt       DateTime          @default(now())
@@ -146,60 +176,137 @@ model Shift {
   requiredSkill   Skill             @relation(fields: [requiredSkillId], references: [id], onDelete: Restrict)
   assignments     ShiftAssignment[]
   swapRequests    SwapRequest[]
+  reminderJobs    ReminderJob[]
 
   @@index([locationId, startTime])
+  @@index([eventInstanceId])
+}
+
+model EventTemplate {
+  id             String                     @id @default(uuid())
+  title          String
+  description    String?
+  scope          EventTemplateScope         @default(LOCATION)
+  locationId     String?
+  dayOfWeek      Int
+  startTimeLocal String
+  endTimeLocal   String
+  timezone       String
+  isActive       Boolean                    @default(true)
+  createdById    String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  location       Location?                  @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  createdBy      User?                      @relation("EventTemplateCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  requirements   EventTemplateRequirement[]
+
+  @@index([scope, locationId, dayOfWeek, isActive])
+  @@index([createdById])
+}
+
+model EventTemplateRequirement {
+  id              String        @id @default(uuid())
+  eventTemplateId String
+  requiredSkillId String
+  headcountNeeded Int           @default(1)
+  isOptional      Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  eventTemplate   EventTemplate @relation(fields: [eventTemplateId], references: [id], onDelete: Cascade)
+  requiredSkill   Skill         @relation(fields: [requiredSkillId], references: [id], onDelete: Restrict)
+
+  @@index([eventTemplateId, sortOrder])
+  @@index([requiredSkillId])
 }
 
 model ShiftAssignment {
-  id          String            @id @default(uuid())
-  shiftId     String
-  userId      String
-  status      AssignmentStatus  @default(ASSIGNED)
-  shift       Shift             @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id      String           @id @default(uuid())
+  shiftId String
+  userId  String
+  status  AssignmentStatus @default(ASSIGNED)
+  shift   Shift            @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  user    User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([shiftId, userId])
   @@index([userId, shiftId])
 }
 
 model SwapRequest {
-  id               String      @id @default(uuid())
+  id               String     @id @default(uuid())
   shiftId          String
   requestingUserId String
   targetUserId     String?
   type             SwapType
-  status           SwapStatus  @default(PENDING)
+  status           SwapStatus @default(PENDING)
   expiresAt        DateTime
-  createdAt        DateTime    @default(now())
-  shift            Shift       @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-  requestingUser   User        @relation("SwapRequestRequester", fields: [requestingUserId], references: [id], onDelete: Cascade)
-  targetUser       User?       @relation("SwapRequestTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  createdAt        DateTime   @default(now())
+  shift            Shift      @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  requestingUser   User       @relation("SwapRequestRequester", fields: [requestingUserId], references: [id], onDelete: Cascade)
+  targetUser       User?      @relation("SwapRequestTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
 
   @@index([shiftId, status])
   @@index([requestingUserId, status])
 }
 
 model AuditLog {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   userId      String
   action      String
   entityType  String
   entityId    String
   beforeState Json?
   afterState  Json?
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([entityType, entityId, createdAt])
 }
 
+model Notification {
+  id                String    @id @default(uuid())
+  userId            String
+  type              String
+  message           String
+  relatedEntityId   String?
+  relatedEntityType String?
+  isRead            Boolean   @default(false)
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+}
+
+model ReminderJob {
+  id         String            @id @default(uuid())
+  userId     String
+  shiftId    String
+  channel    ReminderChannel
+  window     ReminderWindow
+  dueAt      DateTime
+  status     ReminderJobStatus @default(PENDING)
+  retryCount Int               @default(0)
+  lastError  String?
+  sentAt     DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shift      Shift             @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, shiftId, channel, window])
+  @@index([status, dueAt])
+  @@index([shiftId, userId])
+}
+
 model LocationManager {
-  id          String    @id @default(uuid())
-  locationId  String
-  userId      String
-  createdAt   DateTime  @default(now())
-  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  locationId String
+  userId     String
+  createdAt  DateTime @default(now())
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([locationId, userId])
   @@index([userId, locationId])

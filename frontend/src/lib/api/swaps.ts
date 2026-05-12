@@ -13,14 +13,12 @@ import type {
 
 export const swapService = {
   async getSwapRequests(params: GetSwapRequestsParams | null) {
-    if (!params?.locationId && !params?.userId) {
-      return { data: [], total: 0, hasMore: false } as SwapListResponse
-    }
-
     const queryParams: Record<string, any> = {}
-    if (params.status) queryParams.status = params.status
-    if (params.limit) queryParams.limit = params.limit
-    if (params.offset) queryParams.offset = params.offset
+    if (params?.status) queryParams.status = params.status
+    if (params?.limit) queryParams.limit = params.limit
+    if (params?.offset) queryParams.offset = params.offset
+    if (params?.locationId) queryParams.locationId = params.locationId
+    if (params?.userId) queryParams.userId = params.userId
 
     return apiClient.get<SwapListResponse>('/swap-requests', {
       params: queryParams,

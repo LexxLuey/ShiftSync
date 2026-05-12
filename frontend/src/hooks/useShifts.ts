@@ -25,6 +25,7 @@ export default function useShifts(params?: GetShiftsByLocationParams | null) {
     >({
         mutationFn: (payload) => shiftService.createShift(payload),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['shifts'] })
             if (params?.locationId) {
                 queryClient.invalidateQueries({
                     queryKey: ['shifts', params],
@@ -40,6 +41,7 @@ export default function useShifts(params?: GetShiftsByLocationParams | null) {
     >({
         mutationFn: ({ id, payload }) => shiftService.updateShift(id, payload),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['shifts'] })
             if (params?.locationId) {
                 queryClient.invalidateQueries({
                     queryKey: ['shifts', params],
@@ -51,6 +53,7 @@ export default function useShifts(params?: GetShiftsByLocationParams | null) {
     const deleteShiftMutation = useMutation<unknown, NormalizedApiError, string>({
         mutationFn: (shiftId) => shiftService.deleteShift(shiftId),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['shifts'] })
             if (params?.locationId) {
                 queryClient.invalidateQueries({
                     queryKey: ['shifts', params],
@@ -62,6 +65,7 @@ export default function useShifts(params?: GetShiftsByLocationParams | null) {
     const publishShiftMutation = useMutation<unknown, NormalizedApiError, string>({
         mutationFn: (shiftId) => shiftService.publishShift(shiftId),
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['shifts'] })
             if (params?.locationId) {
                 queryClient.invalidateQueries({
                     queryKey: ['shifts', params],
