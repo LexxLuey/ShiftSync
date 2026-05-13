@@ -11,6 +11,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx --env-file=.env prisma/seed.ts",
+    "fix:availability:locations": "tsx --env-file=.env prisma/scripts/fix-availability-location.ts",
+    "fix:availability:normalize": "tsx --env-file=.env prisma/scripts/normalize-availability-5to21.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

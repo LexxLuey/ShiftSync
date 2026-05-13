@@ -4,6 +4,7 @@ import { executeWithLock } from '../../lib/redis/lock.js';
 import {
   validateShiftAssignment,
   createAssignment,
+  createAssignmentWithPolicy,
   deleteAssignment,
   getEligibleStaff,
   createAssignmentWithOverride,
@@ -67,33 +68,14 @@ export const postAssignment = async (
     const { shiftId } = request.params as { shiftId: string };
     const payload = validateSchema(createAssignmentSchema, request.body);
 
-    // Execute with lock to prevent concurrent assignments
-    const assignment = await executeWithLock(`user:${payload.userId}:lock`, async () => {
-      // Re-validate after acquiring lock (before creating)
-      const validation = await validateShiftAssignment(shiftId, payload.userId);
-
-      if (!validation.valid) {
-        // Return structured validation error
-        response.status(400).json({
-          success: false,
-          error: {
-            code: 'ASSIGNMENT_VIOLATION',
-            message: `Cannot assign ${payload.userId} to shift`,
-            violations: validation.violations,
-          },
-        });
-        return null;
-      }
-
-      // Create assignment
-      return await createAssignment(shiftId, payload);
-    });
-
-    if (!assignment) return; // Response already sent in lock callback
+    // Lock both shift and user scope for concurrency safety.
+    const assignmentResult = await executeWithLock(`shift:${shiftId}:lock`, async () =>
+      executeWithLock(`user:${payload.userId}:lock`, async () =>
+        createAssignmentWithPolicy(shiftId, payload)));
 
     response.status(201).json({
       success: true,
-      data: assignment,
+      data: assignmentResult,
     });
   } catch (error) {
     next(error);
@@ -140,6 +122,7 @@ export const getEligibleStaffHandler = async (
       ...(query.search ? { search: query.search } : {}),
       ...(query.fairnessStartDate ? { fairnessStartDate: query.fairnessStartDate } : {}),
       ...(query.fairnessEndDate ? { fairnessEndDate: query.fairnessEndDate } : {}),
+      ...(query.replaceExisting !== undefined ? { replaceExisting: query.replaceExisting } : {}),
     });
 
     response.status(200).json({

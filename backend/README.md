@@ -49,13 +49,27 @@ Seed data:
 npm run seed
 ```
 
+Repair legacy availability rows (if upgrading existing data):
+
+```bash
+# Dry run (no writes)
+npm run fix:availability:locations
+
+# Apply changes
+npm run fix:availability:locations -- --apply
+```
+
+Notes:
+- Recurring availability is now center-scoped (`locationId` required).
+- The repair script clones legacy global availability (`locationId=null`) to each active certified center and removes the legacy global row.
+
 ## Seeded Test Accounts
 
 When seed completes:
 
-- Admin: `admin@shiftsync.com` / `AdminPass123`
-- Manager: `manager1@shiftsync.com` / `ManagerPass123`
-- Staff: `staff1@shiftsync.com` / `StaffPass123`
+- Super Admin: `director@cfc-kids.org` / `ChurchPass123!`
+- Center Manager (CCO): `mainland.cco@cfc-kids.org` / `ChurchPass123!`
+- Center Staff (Teacher): `teacher.mainland.1@cfc-kids.org` / `ChurchPass123!`
 
 ## Run
 

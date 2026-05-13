@@ -57,11 +57,12 @@ Frontend uses backend JWT auth endpoints.
 
 If backend seed was run:
 
-- Admin: `admin@shiftsync.com` / `AdminPass123`
-- Manager: `manager1@shiftsync.com` / `ManagerPass123`
-- Staff: `staff1@shiftsync.com` / `StaffPass123`
+- Super Admin: `director@cfc-kids.org` / `ChurchPass123!`
+- Center Manager (CCO): `mainland.cco@cfc-kids.org` / `ChurchPass123!`
+- Center Staff (Teacher): `teacher.mainland.1@cfc-kids.org` / `ChurchPass123!`
 
 ## Notes
 
 - Ensure backend is running and reachable from frontend.
 - Main API calls go to backend `/api/v1` through `NEXT_PUBLIC_API_BASE_URL`.
+- Recurring availability requires selecting a center (location) on `/availability`.

@@ -71,6 +71,86 @@ Time zone considerations:
 Verification notes:
 - `npm run build` passed in `backend`.
 - `npm run build` passed in `frontend`.
+
+---
+
+# Assignment Reassign + Truthful Refresh Fix
+
+## Plan
+
+- [x] Add optional `replaceExisting` in assignment create payload contract.
+- [x] Implement atomic replace path for headcount-1 slots (`assigned|replaced|noop_already_assigned`).
+- [x] Add shift-scoped lock to assignment create controller path.
+- [x] Keep 48-hour publish cutoff enforced for replacement.
+- [x] Update schedule builder modal to request replace mode for headcount-1 slots with existing assignee.
+- [x] Make schedule builder assignment refresh truthful (no silent fallback to empty rows on fetch failure).
+- [x] Update success/error messaging for assign/reassign outcomes.
+- [x] Run backend/frontend build verification.
+
+## Verification Checklist
+
+- [x] Full-capacity headcount-1 slot can be reassigned atomically without manual remove step.
+- [x] Same-user reassignment returns idempotent noop mode.
+- [x] Replace within 48 hours on published shift is blocked with conflict error.
+- [x] Non-replace assign on full slot remains blocked.
+- [x] Assignment refresh failure no longer fakes "No one yet" state.
+- [x] `backend` TypeScript build passes.
+- [x] `frontend` TypeScript build passes.
+
+## Review Summary
+What changed:
+- Added `replaceExisting?: boolean` to assignment create schema and frontend create payload.
+- Added backend `createAssignmentWithPolicy` service with replace/noop/assigned modes and reminder sync/cancel side effects.
+- Updated assignment create controller to lock by `shift:{shiftId}:lock` and `user:{userId}:lock` before mutation.
+- Updated eligible staff modal to support reassignment mode and to ignore replace-safe headcount/already-assigned errors in confirmation.
+- Updated schedule builder to pass reassignment intent, show mode-specific success feedback, and preserve assignment state when refresh calls fail.
+
+Why:
+- Fix false-success/stale-state behavior and unblock reassignment for one-person slots without requiring fragile remove-then-assign timing.
+
+Edge cases handled:
+- Shift with multiple assignments despite headcount-1 returns explicit conflict.
+- Reassigning to already-assigned same user returns noop.
+- Published <48h replacement remains blocked.
+
+Concurrency considerations:
+- Assignment mutation now uses dual Redis lock scopes (shift + user) to avoid same-shift race conditions.
+
+Time zone considerations:
+- Existing UTC shift timestamps remain source of truth; 48-hour cutoff calculations are unchanged.
+
+---
+
+# Reassignment Reliability Follow-up
+
+## Plan
+
+- [x] Add `replaceExisting` query support to eligible-staff endpoint.
+- [x] Evaluate eligible-staff in replace mode with `skipHeadcount=true` to avoid false "qualified" states.
+- [x] Return replace metadata in candidate payload (`isReplaceCapable`, `hardBlockReasons`).
+- [x] Hide blocked candidates during auto-replace flows.
+- [x] Improve assignment error message to show first blocking business reason.
+- [x] Show backend violation reasons in modal confirm failure state.
+- [x] Verify backend/frontend builds.
+
+## Verification Checklist
+
+- [x] Full-capacity slot no longer short-circuits candidate validation in replace mode.
+- [x] Reassignment list excludes blocked candidates in replace mode.
+- [x] Confirm failure messages show human-readable blocker reason.
+- [x] `npm run build` passes in `backend`.
+- [x] `npm run build` passes in `frontend`.
+
+## Review Summary
+What changed:
+- Extended eligible-staff query contract with `replaceExisting` and wired controller/service handling.
+- In replace mode, candidate validation now skips headcount short-circuit and evaluates real blockers.
+- Added `isReplaceCapable` and `hardBlockReasons` to eligible staff payload.
+- Updated modal query path to send `replaceExisting=true`, hide blocked candidates, and render violation details on confirm failure.
+- Updated assignment validation error messaging to prioritize first blocking rule text.
+
+Why:
+- Remove mismatch where modal showed "qualified" but confirm failed due hidden backend blockers.
 - `npm run seed` code path executes, but full completion is blocked in this environment by DB host resolution (`ENOTFOUND tenant/user ...`).
 
 ---

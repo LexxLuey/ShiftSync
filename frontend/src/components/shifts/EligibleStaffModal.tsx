@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react'
 import { Dialog, Input, Button } from '@/components/ui'
 import toast from '@/components/ui/toast'
 import useAssignments from '@/hooks/useAssignments'
-import type { EligibleStaffMember, AssignmentViolation } from '@/lib/api/types'
+import type {
+    AssignmentMutationMode,
+    EligibleStaffMember,
+    AssignmentViolation,
+    NormalizedApiError,
+} from '@/lib/api/types'
 
 type EligibleStaffModalProps = {
     isOpen: boolean
@@ -14,7 +19,14 @@ type EligibleStaffModalProps = {
     shiftLocation?: string
     fairnessStartDate?: string
     fairnessEndDate?: string
-    onAssignmentSuccess?: () => void
+    autoReplace?: boolean
+    currentAssigneeName?: string
+    onAssignmentSuccess?: (payload: {
+        shiftId: string
+        staffName: string
+        mode: AssignmentMutationMode
+        replacedStaffName?: string
+    }) => void
 }
 
 type ModalPhase = 'list' | 'confirmation'
@@ -27,12 +39,15 @@ export default function EligibleStaffModal({
     shiftLocation,
     fairnessStartDate,
     fairnessEndDate,
+    autoReplace = false,
+    currentAssigneeName,
     onAssignmentSuccess,
 }: EligibleStaffModalProps) {
     const [phase, setPhase] = useState<ModalPhase>('list')
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedStaff, setSelectedStaff] = useState<EligibleStaffMember | null>(null)
     const [error, setError] = useState('')
+    const [errorViolations, setErrorViolations] = useState<string[]>([])
 
     const { getEligibleStaffQuery, createAssignmentMutation } = useAssignments()
 
@@ -45,6 +60,7 @@ export default function EligibleStaffModal({
                   search: searchQuery,
                   ...(fairnessStartDate ? { fairnessStartDate } : {}),
                   ...(fairnessEndDate ? { fairnessEndDate } : {}),
+                  ...(autoReplace ? { replaceExisting: true } : {}),
               }
             : null,
     )
@@ -57,8 +73,12 @@ export default function EligibleStaffModal({
                 staff.role.toLowerCase().includes(searchQuery.toLowerCase()),
         ) || []
 
+    const visibleStaff = autoReplace
+        ? filteredStaff.filter((staff) => staff.isReplaceCapable)
+        : filteredStaff
+
     // Sort by availability (green first, then yellow, then red)
-    const sortedStaff = [...filteredStaff].sort((a, b) => {
+    const sortedStaff = [...visibleStaff].sort((a, b) => {
         const availabilityOrder = { green: 0, yellow: 1, red: 2 }
         return (
             availabilityOrder[a.availabilityIndicator] -
@@ -73,6 +93,7 @@ export default function EligibleStaffModal({
             setSearchQuery('')
             setSelectedStaff(null)
             setError('')
+            setErrorViolations([])
         }
     }, [isOpen])
 
@@ -80,12 +101,14 @@ export default function EligibleStaffModal({
         setSelectedStaff(staff)
         setPhase('confirmation')
         setError('')
+        setErrorViolations([])
     }
 
     const handleBackToList = () => {
         setPhase('list')
         setSelectedStaff(null)
         setError('')
+        setErrorViolations([])
     }
 
     const handleConfirmAssignment = async () => {
@@ -93,31 +116,70 @@ export default function EligibleStaffModal({
 
         try {
             setError('')
-            await createAssignmentMutation.mutateAsync({
+            setErrorViolations([])
+            const assignmentResponse = await createAssignmentMutation.mutateAsync({
                 shiftId,
                 userId: selectedStaff.userId,
+                ...(autoReplace ? { replaceExisting: true } : {}),
             })
 
-            toast.push(`${selectedStaff.name} assigned to shift`, {
-                placement: 'top-end',
-            })
+            const mode = assignmentResponse.data.mode
+            const successMessage =
+                mode === 'replaced'
+                    ? `Reassigned shift to ${selectedStaff.name}`
+                    : mode === 'noop_already_assigned'
+                      ? `${selectedStaff.name} is already assigned`
+                      : `${selectedStaff.name} assigned to shift`
+            toast.push(successMessage, { placement: 'top-end' })
 
-            onAssignmentSuccess?.()
+            onAssignmentSuccess?.({
+                shiftId,
+                staffName: selectedStaff.name,
+                mode,
+                ...(mode === 'replaced' && currentAssigneeName
+                    ? { replacedStaffName: currentAssigneeName }
+                    : {}),
+            })
             onClose()
         } catch (err: any) {
-            const errorMsg = err?.message || 'Failed to assign staff'
+            const normalizedError = err as NormalizedApiError
+            const details = normalizedError.details as
+                | { violations?: Array<{ message?: string }> }
+                | null
+                | undefined
+            const detailsViolations = Array.isArray(details?.violations)
+                ? details.violations
+                : []
+            const topLevelViolations = Array.isArray(normalizedError.violations)
+                ? normalizedError.violations
+                : []
+            const violationMessages = [...topLevelViolations, ...detailsViolations]
+                .map((violation) => violation.message)
+                .filter((message): message is string => Boolean(message))
+            const uniqueViolationMessages = Array.from(new Set(violationMessages))
+
+            const errorMsg = normalizedError.message || 'Failed to assign staff'
             setError(errorMsg)
+            setErrorViolations(uniqueViolationMessages)
             toast.push(errorMsg, { placement: 'top-end' })
         }
     }
 
-    // Check if assignment has hard blocks
-    const hasHardBlocks =
-        selectedStaff?.warnings.some((v) => v.severity === 'error') || false
+    const isReplaceIgnoredError = (violation: AssignmentViolation): boolean =>
+        autoReplace &&
+        (violation.type === 'headcount_exceeded' || violation.type === 'already_assigned')
 
     // Get violations for display
     const warnings = selectedStaff?.warnings.filter((v) => v.severity === 'warning') || []
-    const errors = selectedStaff?.warnings.filter((v) => v.severity === 'error') || []
+    const ignoredErrors =
+        selectedStaff?.warnings.filter(
+            (v) => v.severity === 'error' && isReplaceIgnoredError(v),
+        ) || []
+    const errors =
+        selectedStaff?.warnings.filter(
+            (v) => v.severity === 'error' && !isReplaceIgnoredError(v),
+        ) || []
+    const hasHardBlocks = errors.length > 0
 
     return (
         <Dialog isOpen={isOpen} onRequestClose={onClose} width={600}>
@@ -252,6 +314,20 @@ export default function EligibleStaffModal({
                             </div>
                         )}
 
+                        {autoReplace && currentAssigneeName && (
+                            <div className="p-4 bg-indigo-50 border border-indigo-200 rounded text-indigo-900 text-sm">
+                                Reassignment mode: selecting this staff will replace{' '}
+                                <span className="font-semibold">{currentAssigneeName}</span>.
+                            </div>
+                        )}
+
+                        {ignoredErrors.length > 0 && (
+                            <div className="p-4 bg-blue-50 border border-blue-200 rounded text-blue-900 text-sm">
+                                Capacity conflicts will be handled automatically by replacing the
+                                current assignee.
+                            </div>
+                        )}
+
                         {/* Hard Errors (Blocks) */}
                         {errors.length > 0 && (
                             <div className="p-4 bg-red-50 border border-red-200 rounded">
@@ -302,7 +378,14 @@ export default function EligibleStaffModal({
                         {/* Error State */}
                         {error && (
                             <div className="p-4 bg-red-50 border border-red-200 rounded text-red-800">
-                                {error}
+                                <p>{error}</p>
+                                {errorViolations.length > 0 && (
+                                    <ul className="mt-2 space-y-1 text-sm">
+                                        {errorViolations.map((violation, index) => (
+                                            <li key={`${violation}-${index}`}>• {violation}</li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
                         )}
 
@@ -327,7 +410,9 @@ export default function EligibleStaffModal({
                             >
                                 {createAssignmentMutation.isPending
                                     ? 'Assigning...'
-                                    : 'Confirm Assignment'}
+                                    : autoReplace
+                                      ? 'Confirm Reassignment'
+                                      : 'Confirm Assignment'}
                             </Button>
                         </div>
                     </>

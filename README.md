@@ -1,4 +1,4 @@
-# ShiftSync - Restaurant Shift Management System
+# ShiftSync - Children’s Church Scheduling System
 
 **Production URLs:**
 
@@ -10,7 +10,7 @@
 
 ## 📋 Project Overview
 
-ShiftSync is a comprehensive shift management system designed for multi-location restaurant operations. It handles employee scheduling, availability management, shift swaps, overtime tracking, and ensures fairness in shift distribution while enforcing business constraints.
+ShiftSync is a shift management system for multi-center children’s church operations. It handles recurring event scheduling, center-scoped availability management, assignments, reminders, and fairness-aware staff distribution while enforcing business constraints.
 
 ### Key Features
 
@@ -122,6 +122,16 @@ ShiftSync is a comprehensive shift management system designed for multi-location
    npm run seed
    ```
 
+   If you are upgrading an existing database that has legacy global availability rows (`locationId = null`), run:
+
+   ```bash
+   # Dry run
+   npm run fix:availability:locations
+
+   # Apply migration of legacy rows to center-scoped rows
+   npm run fix:availability:locations -- --apply
+   ```
+
 5. **Start development server:**
 
    ```bash
@@ -149,7 +159,7 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 
    ```env
    NEXT_PUBLIC_API_BASE_URL="http://localhost:5000"
-   NEXT_PUBLIC_WS_URL="http://localhost:5000"
+   NEXT_PUBLIC_SOCKET_URL="http://localhost:5000"
    ```
 
 4. **Start development server:**
@@ -181,7 +191,7 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `NEXT_PUBLIC_API_BASE_URL` | Backend API URL | `http://localhost:5000` |
-| `NEXT_PUBLIC_WS_URL` | WebSocket URL | `http://localhost:5000` |
+| `NEXT_PUBLIC_SOCKET_URL` | WebSocket URL | `http://localhost:5000` |
 
 ---
 
@@ -233,7 +243,8 @@ ShiftSync is a comprehensive shift management system designed for multi-location
 ## 📚 Documentation
 
 - **[USER_GUIDE.md](./USER_GUIDE.md)** - Complete guide for using the application
-- **[ASSUMPTIONS.md](./ASSUMPTIONS.md)** - Design decisions and trade-offs
+- **[backend/README.md](./backend/README.md)** - Backend setup, seed, and repair scripts
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contributor workflow and standards
 
 ---
 
@@ -243,11 +254,11 @@ After seeding, use these credentials to test different roles:
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | `admin@shiftsync.com` | `AdminPass123` |
-| Manager | `manager1@shiftsync.com` | `ManagerPass123` |
-| Manager | `manager2@shiftsync.com` | `ManagerPass123` |
-| Staff | `staff1@shiftsync.com` | `StaffPass123` |
-| Staff | `staff2@shiftsync.com` | `StaffPass123` |
+| Super Admin | `director@cfc-kids.org` | `ChurchPass123!` |
+| Center Manager (CCO) | `mainland.cco@cfc-kids.org` | `ChurchPass123!` |
+| Center Manager (ACO) | `mainland.aco@cfc-kids.org` | `ChurchPass123!` |
+| Staff (Teacher) | `teacher.mainland.1@cfc-kids.org` | `ChurchPass123!` |
+| Staff (Volunteer) | `volunteer.mainland.1@cfc-kids.org` | `ChurchPass123!` |
 
 ---
 

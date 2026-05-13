@@ -1,9 +1,9 @@
 import { Metadata } from 'next'
 
 const pageMeta: Metadata = {
-    title: 'ShiftSync - Employee Scheduling and Shift Management',
+    title: "CFC KIDS ShiftSync - Children's Church Scheduling",
     description:
-        'Empower your workforce with ShiftSync - the ultimate employee scheduling and shift management solution. Streamline scheduling, manage shifts, and enhance communication for a more efficient workplace.',
+        "Coordinate children's church schedules across centers with CFC KIDS ShiftSync. Manage events, assignments, and reminders with clarity.",
     icons: {
         icon: '/favicon.ico',
     },

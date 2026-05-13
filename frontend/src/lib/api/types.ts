@@ -98,7 +98,7 @@ export type CreateAvailabilityPayload = {
     dayOfWeek: number
     startTime: string
     endTime: string
-    locationId?: string
+    locationId: string
 }
 
 export type CreateExceptionPayload = {
@@ -138,6 +138,8 @@ export type EligibleStaffMember = {
     role: string
     available: boolean
     warnings: AssignmentViolation[]
+    hardBlockReasons: string[]
+    isReplaceCapable: boolean
     availabilityIndicator: 'green' | 'yellow' | 'red'
     assignmentCountInWindow: number
     rank: number
@@ -149,10 +151,26 @@ export type GetEligibleStaffParams = {
     search?: string
     fairnessStartDate?: string
     fairnessEndDate?: string
+    replaceExisting?: boolean
 }
 
 export type CreateAssignmentPayload = {
     userId: string
+    replaceExisting?: boolean
+}
+
+export type AssignmentMutationMode = 'assigned' | 'replaced' | 'noop_already_assigned'
+
+export type AssignmentMutationData = {
+    assignment: ShiftAssignment
+    mode: AssignmentMutationMode
+    replacedUserId?: string
+    replacedAssignmentId?: string
+}
+
+export type CreateAssignmentResponse = {
+    success: boolean
+    data: AssignmentMutationData
 }
 
 export type AssignmentResponse = {
@@ -482,6 +500,7 @@ export type GeneratedShiftSummary = {
 export type SkippedShiftSummary = Omit<GeneratedShiftSummary, 'shiftId'> & {
     reason: 'already_exists'
     existingShiftId: string
+    existingShiftStatus: ShiftStatus
 }
 
 export type GenerateScheduleResponse = {

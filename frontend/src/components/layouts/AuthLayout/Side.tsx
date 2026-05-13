@@ -1,5 +1,6 @@
 import { cloneElement } from 'react'
 import type { CommonProps } from '@/@types/common'
+import Image from 'next/image'
 
 type SideProps = CommonProps
 
@@ -17,11 +18,16 @@ const Side = ({ children, ...rest }: SideProps) => {
                 </div>
             </div>
             <div className="py-6 px-10 lg:flex flex-col flex-1 justify-between hidden rounded-3xl items-end relative max-w-[520px] 2xl:max-w-[720px]">
-                <img
-                    src="/img/others/auth-side-bg.png"
-                    className="absolute h-full w-full top-0 left-0 rounded-3xl"
-                    alt="auth-side-bg"
-                />
+                <div className="absolute h-full w-full top-0 left-0 rounded-3xl bg-white dark:bg-gray-900 flex items-center justify-center p-8">
+                    <Image
+                        src="/img/logo/cfc-kids-logo-2.jpeg"
+                        alt="CFC KIDS ShiftSync"
+                        width={942}
+                        height={1080}
+                        className="h-full w-full object-contain rounded-2xl"
+                        priority
+                    />
+                </div>
             </div>
         </div>
     )

@@ -1,4 +1,5 @@
 import prismaClient from '../../lib/db/prisma.js';
+import type { Prisma } from '@prisma/client';
 import { ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../../lib/errors/customErrors.js';
 import { calculateDailyHours, calculateWeeklyHours, getConsecutiveDaysWorked } from '../../lib/validation/overtime.js';
 import { isUserAvailableAtTime } from '../availability/service.js';
@@ -20,6 +21,20 @@ interface ValidateAssignmentResult {
   violations: Violation[];
   suggestions?: Array<{ userId: string; name: string; reason: string }>;
 }
+
+interface ValidateAssignmentOptions {
+  skipHeadcount?: boolean;
+  skipAlreadyAssigned?: boolean;
+}
+
+type AssignmentMutationMode = 'assigned' | 'replaced' | 'noop_already_assigned';
+
+type AssignmentMutationResult = {
+  assignment: Awaited<ReturnType<typeof createAssignment>>;
+  mode: AssignmentMutationMode;
+  replacedUserId?: string;
+  replacedAssignmentId?: string;
+};
 
 /**
  * Find overlapping shifts for a user in a date range
@@ -83,7 +98,8 @@ export const checkHeadcountNotExceeded = async (shiftId: string): Promise<boolea
  */
 export const validateShiftAssignment = async (
   shiftId: string,
-  userId: string
+  userId: string,
+  options: ValidateAssignmentOptions = {},
 ): Promise<ValidateAssignmentResult> => {
   const violations: Violation[] = [];
 
@@ -93,6 +109,16 @@ export const validateShiftAssignment = async (
     include: {
       location: true,
       requiredSkill: true,
+      assignments: {
+        where: {
+          status: {
+            in: ['ASSIGNED', 'PENDING_SWAP'],
+          },
+        },
+        select: {
+          userId: true,
+        },
+      },
     },
   });
 
@@ -109,29 +135,33 @@ export const validateShiftAssignment = async (
   }
 
   // 2. Headcount not exceeded
-  const headcountOk = await checkHeadcountNotExceeded(shiftId);
-  if (!headcountOk) {
-    violations.push({
-      type: 'headcount_exceeded',
-      severity: 'error',
-      message: `Shift is at full capacity (${shift.headcountNeeded} staff needed)`,
-      details: { required: shift.headcountNeeded },
-    });
-    return { valid: false, violations };
+  if (!options.skipHeadcount) {
+    const headcountOk = await checkHeadcountNotExceeded(shiftId);
+    if (!headcountOk) {
+      violations.push({
+        type: 'headcount_exceeded',
+        severity: 'error',
+        message: `Shift is at full capacity (${shift.headcountNeeded} staff needed)`,
+        details: { required: shift.headcountNeeded },
+      });
+      return { valid: false, violations };
+    }
   }
 
   // 3. User not already assigned
-  const existing = await prismaClient.shiftAssignment.findFirst({
-    where: { shiftId, userId },
-  });
-
-  if (existing) {
-    violations.push({
-      type: 'already_assigned',
-      severity: 'error',
-      message: `User is already assigned to this shift`,
+  if (!options.skipAlreadyAssigned) {
+    const existing = await prismaClient.shiftAssignment.findFirst({
+      where: { shiftId, userId },
     });
-    return { valid: false, violations };
+
+    if (existing) {
+      violations.push({
+        type: 'already_assigned',
+        severity: 'error',
+        message: 'User is already assigned to this shift',
+      });
+      return { valid: false, violations };
+    }
   }
 
   // 4. User certified for location
@@ -363,41 +393,232 @@ export const validateShiftAssignment = async (
   };
 };
 
+const createAssignmentRecord = async (
+  tx: Prisma.TransactionClient,
+  shiftId: string,
+  userId: string,
+) => {
+  const createdAssignment = await tx.shiftAssignment.create({
+    data: {
+      shiftId,
+      userId,
+      status: 'ASSIGNED',
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      },
+      shift: {
+        include: {
+          location: true,
+          requiredSkill: true,
+        },
+      },
+    },
+  });
+
+  await syncReminderJobsForAssignment(shiftId, userId, tx);
+
+  return createdAssignment;
+};
+
+const toAssignmentValidationError = (
+  shiftId: string,
+  userId: string,
+  violations: Violation[],
+): Error => {
+  const firstBlockingViolation = violations.find((violation) => violation.severity === 'error');
+  const hasHeadcountViolation = violations.some((violation) => violation.type === 'headcount_exceeded');
+
+  if (hasHeadcountViolation) {
+    return new ConflictError(
+      firstBlockingViolation?.message || 'Shift is at full capacity. Replace existing assignee or remove assignment first.',
+      {
+        shiftId,
+        userId,
+        violations,
+      },
+      ['For one-person slots, retry with replaceExisting=true.'],
+    );
+  }
+
+  return new ValidationError(
+    firstBlockingViolation?.message || 'Cannot assign user to this shift',
+    {
+      shiftId,
+      userId,
+      violations,
+    },
+    ['Resolve blocking violations and retry assignment.'],
+  );
+};
+
+const assertPublishedRemovalAllowed = (shift: { status: string; startTime: Date }): void => {
+  if (shift.status !== 'PUBLISHED') {
+    return;
+  }
+
+  const hoursUntilShift = (shift.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60);
+  if (hoursUntilShift < 48) {
+    throw new ConflictError(
+      'Cannot replace assignment within 48 hours of shift start time',
+      { hoursUntilShift },
+      ['Assignments must be changed at least 48 hours before shift start.'],
+    );
+  }
+};
+
 /**
  * Create a new shift assignment
  */
 export const createAssignment = async (shiftId: string, payload: CreateAssignmentPayload) => {
-  const assignment = await prismaClient.$transaction(async (tx) => {
-    const createdAssignment = await tx.shiftAssignment.create({
-      data: {
-        shiftId,
-        userId: payload.userId,
-        status: 'ASSIGNED',
-      },
+  const assignment = await prismaClient.$transaction(async (tx) =>
+    createAssignmentRecord(tx, shiftId, payload.userId));
+
+  return assignment;
+};
+
+/**
+ * Create assignment with optional replace policy for headcount-1 shifts.
+ */
+export const createAssignmentWithPolicy = async (
+  shiftId: string,
+  payload: CreateAssignmentPayload,
+): Promise<AssignmentMutationResult> => {
+  if (!payload.replaceExisting) {
+    const validation = await validateShiftAssignment(shiftId, payload.userId);
+    if (!validation.valid) {
+      throw toAssignmentValidationError(shiftId, payload.userId, validation.violations);
+    }
+
+    const assignment = await createAssignment(shiftId, payload);
+    return {
+      assignment,
+      mode: 'assigned',
+    };
+  }
+
+  return prismaClient.$transaction(async (tx) => {
+    const shift = await tx.shift.findUnique({
+      where: { id: shiftId },
       include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-        shift: {
-          include: {
-            location: true,
-            requiredSkill: true,
+        assignments: {
+          where: {
+            status: {
+              in: ['ASSIGNED', 'PENDING_SWAP'],
+            },
           },
         },
       },
     });
 
-    await syncReminderJobsForAssignment(shiftId, payload.userId, tx);
+    if (!shift) {
+      throw new NotFoundError('Shift not found', { shiftId });
+    }
 
-    return createdAssignment;
+    if (shift.headcountNeeded !== 1) {
+      throw new ConflictError(
+        'replaceExisting is only supported for shifts with headcount of 1',
+        { shiftId, headcountNeeded: shift.headcountNeeded },
+        ['Disable replaceExisting for multi-headcount shifts.'],
+      );
+    }
+
+    if (shift.assignments.length > 1) {
+      throw new ConflictError(
+        'Cannot auto-replace because this shift has multiple assignments',
+        {
+          shiftId,
+          assignmentCount: shift.assignments.length,
+        },
+        ['Remove extra assignments manually, then retry replacement.'],
+      );
+    }
+
+    const existingAssignment = shift.assignments[0] ?? null;
+    if (existingAssignment && existingAssignment.userId === payload.userId) {
+      const existingWithRelations = await tx.shiftAssignment.findUnique({
+        where: { id: existingAssignment.id },
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+          shift: {
+            include: {
+              location: true,
+              requiredSkill: true,
+            },
+          },
+        },
+      });
+
+      if (!existingWithRelations) {
+        throw new NotFoundError('Assignment not found', { assignmentId: existingAssignment.id });
+      }
+
+      return {
+        assignment: existingWithRelations,
+        mode: 'noop_already_assigned',
+      };
+    }
+
+    const validation = await validateShiftAssignment(shiftId, payload.userId, {
+      skipHeadcount: true,
+      skipAlreadyAssigned: true,
+    });
+    if (!validation.valid) {
+      throw toAssignmentValidationError(shiftId, payload.userId, validation.violations);
+    }
+
+    if (existingAssignment) {
+      assertPublishedRemovalAllowed({
+        status: shift.status,
+        startTime: shift.startTime,
+      });
+
+      await tx.shiftAssignment.delete({
+        where: { id: existingAssignment.id },
+      });
+
+      try {
+        await cancelReminderJobsForAssignment(shiftId, existingAssignment.userId, tx);
+      } catch (error) {
+        console.error(
+          '[assignments.createAssignmentWithPolicy] reminder cancel failed during replace',
+          {
+            shiftId,
+            assignmentId: existingAssignment.id,
+            userId: existingAssignment.userId,
+            error,
+          },
+        );
+      }
+
+      const replacementAssignment = await createAssignmentRecord(tx, shiftId, payload.userId);
+      return {
+        assignment: replacementAssignment,
+        mode: 'replaced',
+        replacedUserId: existingAssignment.userId,
+        replacedAssignmentId: existingAssignment.id,
+      };
+    }
+
+    const assignment = await createAssignmentRecord(tx, shiftId, payload.userId);
+    return {
+      assignment,
+      mode: 'assigned',
+    };
   });
-
-  return assignment;
 };
 
 /**
@@ -433,7 +654,21 @@ export const deleteAssignment = async (assignmentId: string) => {
       where: { id: assignmentId },
     });
 
-    await cancelReminderJobsForAssignment(assignment.shiftId, assignment.userId, tx);
+    try {
+      await cancelReminderJobsForAssignment(assignment.shiftId, assignment.userId, tx);
+    } catch (error) {
+      // Reminder side-effects should not block primary unassignment flow.
+      // We log and continue so managers can still correct staffing.
+      console.error(
+        '[assignments.deleteAssignment] reminder cancel failed',
+        {
+          assignmentId,
+          shiftId: assignment.shiftId,
+          userId: assignment.userId,
+          error,
+        },
+      );
+    }
   });
 
   return { message: 'Assignment removed successfully' };
@@ -449,6 +684,7 @@ export const getEligibleStaff = async (
     search?: string;
     fairnessStartDate?: string;
     fairnessEndDate?: string;
+    replaceExisting?: boolean;
   },
 ): Promise<
   Array<{
@@ -457,6 +693,8 @@ export const getEligibleStaff = async (
     role: string;
     available: boolean;
     warnings: Violation[];
+    hardBlockReasons: string[];
+    isReplaceCapable: boolean;
     availabilityIndicator: 'green' | 'yellow' | 'red';
     assignmentCountInWindow: number;
     rank: number;
@@ -464,12 +702,23 @@ export const getEligibleStaff = async (
 > => {
   const limit = options?.limit ?? 20;
   const search = options?.search;
+  const replaceExisting = options?.replaceExisting === true;
 
   const shift = await prismaClient.shift.findUnique({
     where: { id: shiftId },
     include: {
       location: true,
       requiredSkill: true,
+      assignments: {
+        where: {
+          status: {
+            in: ['ASSIGNED', 'PENDING_SWAP'],
+          },
+        },
+        select: {
+          userId: true,
+        },
+      },
     },
   });
 
@@ -498,6 +747,14 @@ export const getEligibleStaff = async (
   const fairnessWindowEnd = options?.fairnessEndDate
     ? new Date(`${options.fairnessEndDate}T23:59:59.999Z`)
     : fallbackWindowEnd;
+  const shiftHasExistingAssignments = shift.assignments.length > 0;
+  const replaceWindowBlocked =
+    replaceExisting &&
+    shift.status === 'PUBLISHED' &&
+    shiftHasExistingAssignments &&
+    (shift.startTime.getTime() - new Date().getTime()) / (1000 * 60 * 60) < 48;
+  const replaceWindowBlockedMessage =
+    'Cannot replace assignment within 48 hours of shift start time';
 
   // Candidate pool: MANAGER + STAFF with required skill and center certification.
   const staff = await prismaClient.user.findMany({
@@ -557,7 +814,18 @@ export const getEligibleStaff = async (
   // Validate each staff member
   const rankedCandidates = await Promise.all(
     staff.map(async (user) => {
-      const validation = await validateShiftAssignment(shiftId, user.id);
+      const validation = await validateShiftAssignment(
+        shiftId,
+        user.id,
+        replaceExisting ? { skipHeadcount: true } : {},
+      );
+      const validationHardBlocks = validation.violations
+        .filter((violation) => violation.severity === 'error')
+        .map((violation) => violation.message);
+      const hardBlockReasons = replaceWindowBlocked
+        ? [...validationHardBlocks, replaceWindowBlockedMessage]
+        : validationHardBlocks;
+      const isReplaceCapable = hardBlockReasons.length === 0;
       const availabilityIndicator: 'green' | 'yellow' | 'red' = validation.violations.some(
         (v) => v.severity === 'error',
       )
@@ -572,6 +840,8 @@ export const getEligibleStaff = async (
         role: user.role,
         available: validation.valid,
         warnings: validation.violations,
+        hardBlockReasons,
+        isReplaceCapable,
         availabilityIndicator,
         assignmentCountInWindow: assignmentCountByUserId.get(user.id) ?? 0,
       };
@@ -594,7 +864,11 @@ export const getEligibleStaff = async (
     return firstCandidate.name.localeCompare(secondCandidate.name);
   });
 
-  return sortedCandidates.slice(0, limit).map((candidate, index) => ({
+  const visibleCandidates = replaceExisting
+    ? sortedCandidates.filter((candidate) => candidate.isReplaceCapable)
+    : sortedCandidates;
+
+  return visibleCandidates.slice(0, limit).map((candidate, index) => ({
     ...candidate,
     rank: index + 1,
   }));

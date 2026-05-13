@@ -290,41 +290,34 @@ async function main() {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const availabilityOps: Promise<unknown>[] = [];
-    const allServiceUsers = [...managers, ...staffMembers];
+    const serviceUsersWithLocation = [
+        ...managers.map((manager, index) => ({
+            userId: manager.id,
+            locationId: managerProfiles[index]!.locationId,
+        })),
+        ...staffMembers.map((staff, index) => ({
+            userId: staff.id,
+            locationId: centers[staffProfiles[index]!.locationIndex]!.id,
+        })),
+    ];
 
-    allServiceUsers.forEach((user) => {
-        availabilityOps.push(
-            prismaClient.availability.create({
-                data: {
-                    userId: user.id,
-                    dayOfWeek: 2,
-                    startTime: '18:00',
-                    endTime: '21:00',
-                    isRecurring: true,
-                    validFrom: sevenDaysAgo,
-                },
-            }),
-            prismaClient.availability.create({
-                data: {
-                    userId: user.id,
-                    dayOfWeek: 4,
-                    startTime: '18:00',
-                    endTime: '21:00',
-                    isRecurring: true,
-                    validFrom: sevenDaysAgo,
-                },
-            }),
-            prismaClient.availability.create({
-                data: {
-                    userId: user.id,
-                    dayOfWeek: 0,
-                    startTime: '06:00',
-                    endTime: '13:00',
-                    isRecurring: true,
-                    validFrom: sevenDaysAgo,
-                },
-            }),
-        );
+    const recurringDays = [0, 1, 2, 3, 4, 5, 6];
+    serviceUsersWithLocation.forEach((entry) => {
+        recurringDays.forEach((dayOfWeek) => {
+            availabilityOps.push(
+                prismaClient.availability.create({
+                    data: {
+                        userId: entry.userId,
+                        dayOfWeek,
+                        startTime: '05:00',
+                        endTime: '21:00',
+                        locationId: entry.locationId,
+                        isRecurring: true,
+                        validFrom: sevenDaysAgo,
+                    },
+                }),
+            );
+        });
     });
 
     await Promise.all(availabilityOps);

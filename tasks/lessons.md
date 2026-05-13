@@ -274,3 +274,31 @@ When reading `query.error` with custom normalized error contracts, first cast th
 
 Pattern to Watch:
 frontend query/mutation error rendering paths in new pages
+
+### 16. Reassign Flows Must Be Atomic for Headcount-1 Slots
+
+Mistake:
+UI allowed remove-then-assign as separate operations, leading to false success perception and "full capacity" errors during reassignment.
+
+Root Cause:
+Assignment API lacked an atomic replace path and frontend treated assignment refresh failures as empty assignment state.
+
+Prevention Rule:
+For single-headcount shifts, support explicit atomic reassignment on backend and keep frontend assignment state truthful on refresh failures (never silently coerce to empty).
+
+Pattern to Watch:
+schedule-builder reassignment UX, assignment modals, and any optimistic update paths that depend on follow-up refetch.
+
+### 17. Candidate Eligibility and Mutation Validation Must Share the Same Rule Mode
+
+Mistake:
+Eligible-staff lookup evaluated standard assignment mode while confirm action executed replace mode, causing "qualified" UI states that failed on submit.
+
+Root Cause:
+Headcount short-circuit in eligibility check masked deeper blockers (availability/overlap/overtime/48h), while mutation path evaluated them.
+
+Prevention Rule:
+Whenever mutation behavior has modes (assign vs replace), expose the same mode in eligibility/read endpoints and evaluate with identical validation options.
+
+Pattern to Watch:
+all "preview then confirm" flows (eligible staff, swap targets, publish previews) where read-path and write-path can drift.

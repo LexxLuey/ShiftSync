@@ -1,11 +1,10 @@
 'use client'
 
-import Logo from '@/components/template/Logo'
 import Alert from '@/components/ui/Alert'
 import SignUpForm from './SignUpForm'
 import ActionLink from '@/components/shared/ActionLink'
 import useTimeOutMessage from '@/utils/hooks/useTimeOutMessage'
-import useTheme from '@/utils/hooks/useTheme'
+import Image from 'next/image'
 import type { OnSignUp } from './SignUpForm'
 
 type SignUpProps = {
@@ -16,16 +15,16 @@ type SignUpProps = {
 export const SignUp = ({ onSignUp, signInUrl = '/sign-in' }: SignUpProps) => {
     const [message, setMessage] = useTimeOutMessage()
 
-    const mode = useTheme((state) => state.mode)
-
     return (
         <>
             <div className="mb-8">
-                <Logo
-                    type="streamline"
-                    mode={mode}
-                    logoWidth={60}
-                    logoHeight={60}
+                <Image
+                    src="/img/logo/cfc-kids-logo-2.jpeg"
+                    alt="CFC KIDS ShiftSync"
+                    width={942}
+                    height={1080}
+                    className="h-20 w-auto object-contain"
+                    priority
                 />
             </div>
             <div className="mb-8">
