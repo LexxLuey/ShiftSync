@@ -10,7 +10,7 @@ export interface DialogProps extends ReactModal.Props {
     closable?: boolean
     contentClassName?: string
     height?: string | number
-    onClose?: (e: MouseEvent<HTMLSpanElement>) => void
+    onClose?: (e: MouseEvent<HTMLButtonElement>) => void
     width?: number
 }
 
@@ -26,6 +26,7 @@ const Dialog = (props: DialogProps) => {
         contentClassName,
         height,
         isOpen,
+        onRequestClose,
         onClose,
         overlayClassName,
         portalClassName,
@@ -34,8 +35,19 @@ const Dialog = (props: DialogProps) => {
         ...rest
     } = props
 
-    const onCloseClick = (e: MouseEvent<HTMLSpanElement>) => {
-        onClose?.(e)
+    const handleDialogClose = (event?: unknown) => {
+        if (onRequestClose) {
+            onRequestClose(event as Parameters<NonNullable<ReactModal.Props['onRequestClose']>>[0])
+            return
+        }
+
+        if (onClose) {
+            onClose(event as MouseEvent<HTMLButtonElement>)
+        }
+    }
+
+    const onCloseClick = (e: MouseEvent<HTMLButtonElement>) => {
+        handleDialogClose(e)
     }
 
     const renderCloseButton = (
@@ -88,6 +100,7 @@ const Dialog = (props: DialogProps) => {
             bodyOpenClassName={classNames('dialog-open', bodyOpenClassName)}
             ariaHideApp={false}
             isOpen={isOpen}
+            onRequestClose={(event) => handleDialogClose(event)}
             style={{ ...contentStyle }}
             closeTimeoutMS={closeTimeoutMS}
             {...rest}

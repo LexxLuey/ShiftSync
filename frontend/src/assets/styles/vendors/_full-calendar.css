@@ -117,6 +117,10 @@
     @apply p-0 rounded-md mb-2;
   }
 
+  .fc .fc-event {
+    @apply cursor-pointer;
+  }
+
   .fc-h-event {
     @apply bg-transparent border-0;
   }
@@ -146,7 +150,7 @@
   }
 
   .fc .custom-calendar-event {
-    @apply flex items-center min-h-[28px] p-2 rounded-md w-full overflow-hidden text-ellipsis h-full;
+    @apply flex items-center min-h-[28px] p-2 rounded-md w-full overflow-hidden text-ellipsis h-full cursor-pointer;
   }
 
   .fc-v-event {

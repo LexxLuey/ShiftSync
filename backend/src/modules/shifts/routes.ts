@@ -8,6 +8,7 @@ import {
 } from '../auth/guards.js';
 import {
   postShift,
+  getShiftsList,
   getShifts,
   getShift,
   putShift,
@@ -18,6 +19,54 @@ import {
 
 const shiftsRouter = Router({ mergeParams: true });
 shiftsRouter.use(authenticate);
+
+/**
+ * @openapi
+ * /api/v1/shifts:
+ *   get:
+ *     tags: [Shifts]
+ *     summary: List shifts with filters and pagination
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: number
+ *       - in: query
+ *         name: locationId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, PUBLISHED, ALL]
+ *       - in: query
+ *         name: title
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: assignedUserId
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Paginated list of shifts
+ */
+shiftsRouter.get('/', restrictTo('ADMIN', 'MANAGER', 'STAFF'), getShiftsList);
 
 /**
  * @openapi

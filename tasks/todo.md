@@ -456,3 +456,143 @@ Time zone considerations:
 Verification notes:
 - `npm run build` passed in `backend`.
 - `npm run build` passed in `frontend`.
+
+---
+
+# Hotfix: Manager Users Access + Calendar Event Click Details
+
+## Plan
+
+- [x] Allow `MANAGER` role to call `GET /api/v1/users` with center-scoped filtering.
+- [x] Enforce manager scope in users service (managed centers only; reject out-of-scope `locationId`).
+- [x] Allow manager access to `GET /api/v1/users/:id` when target user belongs to manager-managed center scope.
+- [x] Return certifications and flattened skills in users list payload for Staff UI compatibility.
+- [x] Add calendar event click handling on `/schedule`.
+- [x] Add shift details modal on event click (date/time/status/skill/headcount/assigned staff).
+- [x] Verify backend and frontend builds.
+
+## Verification Checklist
+
+- [x] Manager no longer gets forbidden on `/api/v1/users?page=1&limit=20`.
+- [x] Manager still cannot list users outside managed centers.
+- [x] Clicking calendar event opens details modal.
+- [x] Backend TypeScript build passes.
+- [x] Frontend build passes.
+
+## Review Summary
+What changed:
+- Updated users RBAC route to allow `ADMIN` and `MANAGER` list access.
+- Added strict manager-center scoping in users listing and user detail reads.
+- Normalized list user payload to include active certifications and flattened skills for existing frontend consumers.
+- Added calendar event click interaction and details modal on `/schedule`.
+
+Why:
+- Fix immediate manager-facing 403 errors and unblock staff management flows.
+- Fix missing calendar interaction so users can inspect shift details directly from calendar.
+
+Edge cases handled:
+- Manager with no managed centers receives empty list in `/users` list flow.
+- Manager detail read is blocked unless target user is in scoped centers.
+
+Concurrency considerations:
+- No mutation flow changes; read-path RBAC adjustments only.
+
+Time zone considerations:
+- Modal displays existing shift timestamps using frontend locale formatting; backend UTC storage remains unchanged.
+
+---
+
+# FRD Phase 1: Rebuild /shifts as Standard Table
+
+## Plan
+
+- [x] Add backend `GET /api/v1/shifts` list endpoint with pagination + filters (`locationId`, `startDate`, `endDate`, `status`, `title`, `assignedUserId`).
+- [x] Enforce role scope in shift list service:
+  - `ADMIN`: all centers
+  - `MANAGER`: managed centers only
+  - `STAFF`: published shifts assigned to self only
+- [x] Preserve existing `/locations/:locationId/shifts` behavior for current pages; avoid breaking regressions.
+- [x] Add frontend shift list API/types for paginated filtered rows.
+- [x] Rebuild `frontend/src/app/(protected-pages)/shifts/page.tsx` as a proper table page:
+  - filters + pagination
+  - clear date/time/title/assignee visibility
+  - role-based actions (`View/Edit/Delete/New Shift` for manager/admin, `View/Request Swap` for staff)
+- [x] Add modal flows for create one-off shift, edit shift, view details, delete confirm.
+- [x] Add staff swap action guard in UI (`>=24h` + assigned only).
+- [x] Run backend/frontend build verification.
+
+## Review Summary
+What changed:
+- Added `GET /api/v1/shifts` with validated query filters and pagination in shifts module.
+- Added server-side role-scoped listing rules:
+  - staff is forced to own `PUBLISHED` assignments only
+  - manager is center-scoped via `locationManagers`
+  - admin can query all centers.
+- Added overlap-safe date filtering (`shift.start < endExclusive` and `shift.end >= start`) to avoid boundary misses.
+- Kept existing location-scoped endpoint (`/locations/:locationId/shifts`) unchanged for compatibility.
+- Added frontend shift list contracts (`ListShiftsParams`, `PaginatedShiftsResponse`) and `shiftService.listShifts`.
+- Added `useShiftTable` hook for table query + create/update/delete mutations with shared cache invalidation.
+- Rebuilt `/shifts` page as a standard operational table with:
+  - center/date/status/title/assignee filters
+  - pagination
+  - role-based actions (manager/admin edit/delete/create, staff request-swap)
+  - details modal, editor modal, and delete confirmation.
+- Wired staff swap entry with `SwapRequestModal` and UI guard for `<24h`, unpublished, or unassigned rows.
+
+Why:
+- Align `/shifts` with FRD operational workflow and eliminate the previous raw-id utility UX.
+
+Edge cases handled:
+- Manager out-of-scope location filter is rejected server-side.
+- Staff cannot bypass query params to view other users or draft rows.
+- Empty scope lists return safe empty paginated responses.
+- UI swap action explains why row is not eligible (not assigned/unpublished/<24h).
+
+Concurrency considerations:
+- This phase is read-heavy plus existing shift CRUD mutations; no new concurrency risk surface was added beyond current mutation paths.
+- Existing assignment/swap locking behavior remains unchanged.
+
+Time zone considerations:
+- Shift times remain persisted in UTC in backend.
+- Date-range filters use UTC boundaries with end-exclusive math to avoid week/day edge leaks.
+- UI displays local formatted date/time for readability while submitting ISO timestamps for writes.
+
+---
+
+# Hotfix: /shifts Route Collision and Page Contract Audit
+
+## Plan
+
+- [x] Fix backend router collision where `GET /api/v1/shifts` could be handled by swap list route.
+- [x] Split swap routes into two routers:
+  - shift-scoped swap actions under `/shifts/:shiftId/...`
+  - swap-request collection/actions under `/swap-requests/...`
+- [x] Verify `/api/v1/shifts` now resolves to shifts list handler shape (`pagination`) instead of swaps shape (`hasMore`).
+- [x] Audit frontend page consumers for shift response-shape mismatches and patch obvious breakages.
+- [x] Rebuild backend + frontend.
+
+## Review Summary
+What changed:
+- Reworked swaps route composition:
+  - `shiftSwapsRouter` for `/shifts/:shiftId/swap-requests*`
+  - `swapRequestsRouter` for `/swap-requests` list and lifecycle actions.
+- Updated API mount wiring in backend root router so `/api/v1/shifts` no longer overlaps with swaps root list route.
+- Fixed frontend audited mismatches:
+  - `reports` page now reads shift options from `data` and auto-seeds initial location when locations load.
+  - `swaps` page now uses `useShiftTable` and correct shift response shape.
+- Verified builds:
+  - backend `npm run build` passed
+  - frontend `npm run build` passed.
+
+Why:
+- Prevent endpoint handler ambiguity and unblock `/shifts` page data loading.
+
+Edge cases handled:
+- Path-level isolation ensures `/api/v1/shifts` and `/api/v1/swap-requests` cannot return each other’s payload shape.
+- Existing swap endpoints used by frontend remain unchanged in URL contract.
+
+Concurrency considerations:
+- No change to swap/assignment locking behavior; only route composition and read path contracts were adjusted.
+
+Time zone considerations:
+- No change to timezone logic; this fix is routing + API shape alignment.

@@ -3,6 +3,8 @@ import type {
     CreateShiftPayload,
     UpdateShiftPayload,
     GetShiftsByLocationParams,
+    ListShiftsParams,
+    PaginatedShiftsResponse,
     Shift,
     PublishShiftResponse,
 } from './types'
@@ -13,6 +15,11 @@ type ShiftListResponse = {
 } & Record<string, unknown>
 
 export const shiftService = {
+    listShifts(params: ListShiftsParams) {
+        return apiClient.get<PaginatedShiftsResponse>('/shifts', {
+            params,
+        })
+    },
     getShiftsByLocation(params: GetShiftsByLocationParams) {
         const { locationId, ...query } = params
 

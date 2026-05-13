@@ -5,7 +5,11 @@ const pageMeta: Metadata = {
     description:
         "Coordinate children's church schedules across centers with CFC KIDS ShiftSync. Manage events, assignments, and reminders with clarity.",
     icons: {
-        icon: '/favicon.ico',
+        icon: [
+            { url: '/img/logo/cfc-kids-logo.png', type: 'image/png' },
+        ],
+        shortcut: ['/img/logo/cfc-kids-logo.png'],
+        apple: [{ url: '/img/logo/cfc-kids-logo.png' }],
     },
 }
 

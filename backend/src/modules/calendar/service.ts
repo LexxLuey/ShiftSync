@@ -74,9 +74,13 @@ export const listCalendarShifts = async (
 
   const effectiveMine = actor.role === 'STAFF' ? true : query.mine;
   const assignedUserId = effectiveMine ? actor.id : query.assignedUserId;
+  const effectiveStatus =
+    actor.role === 'STAFF'
+      ? 'PUBLISHED'
+      : (query.status ?? 'PUBLISHED');
 
   const whereClause = {
-    status: 'PUBLISHED' as const,
+    ...(effectiveStatus === 'ALL' ? {} : { status: effectiveStatus }),
     startTime: { lt: rangeEndExclusive },
     endTime: { gte: rangeStart },
     ...(scopedLocationIds ? { locationId: { in: scopedLocationIds } } : {}),
@@ -134,4 +138,3 @@ export const listCalendarShifts = async (
     count: shifts.length,
   };
 };
-

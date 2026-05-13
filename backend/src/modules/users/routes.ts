@@ -17,7 +17,7 @@ usersRouter.use(authenticate);
  * /api/v1/users:
  *   get:
  *     tags: [Users]
- *     summary: List users (admin only)
+ *     summary: List users (admin and manager)
  *     security:
  *       - BearerAuth: []
  *     parameters:
@@ -52,7 +52,7 @@ usersRouter.use(authenticate);
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-usersRouter.get('/', restrictTo('ADMIN'), getUsers);
+usersRouter.get('/', restrictTo('ADMIN', 'MANAGER'), getUsers);
 
 /**
  * @openapi

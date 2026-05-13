@@ -10,6 +10,7 @@ export const calendarQuerySchema = z
     title: z.string().min(1).max(200).optional(),
     assignedUserId: z.uuid().optional(),
     mine: z.coerce.boolean().optional().default(false),
+    status: z.enum(['PUBLISHED', 'DRAFT', 'ALL']).optional(),
   })
   .refine((query) => query.startDate <= query.endDate, {
     message: 'startDate must be before or equal to endDate',
@@ -17,4 +18,3 @@ export const calendarQuerySchema = z
   });
 
 export type CalendarQuery = z.infer<typeof calendarQuerySchema>;
-
