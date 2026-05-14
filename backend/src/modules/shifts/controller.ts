@@ -1,7 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
+import { ForbiddenError } from '../../lib/errors/customErrors.js';
 import { validateSchema } from '../../lib/validation/index.js';
 import {
   createShift,
+  listShifts,
   getShiftsByLocation,
   getShiftById,
   updateShift,
@@ -9,7 +11,7 @@ import {
   publishShift,
   getActiveShifts,
 } from './service.js';
-import { createShiftSchema, updateShiftSchema } from './validation.js';
+import { createShiftSchema, updateShiftSchema, listShiftsQuerySchema } from './validation.js';
 
 export const postShift = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
   try {
@@ -42,6 +44,31 @@ export const getShifts = async (request: Request, response: Response, next: Next
     );
 
     response.status(200).json({ data: shifts, count: shifts.length });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getShiftsList = async (
+  request: Request,
+  response: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    if (!request.user) {
+      throw new ForbiddenError('Not authenticated');
+    }
+
+    const query = validateSchema(listShiftsQuerySchema, request.query);
+    const result = await listShifts(
+      {
+        id: request.user.id,
+        role: request.user.role,
+      },
+      query,
+    );
+
+    response.status(200).json(result);
   } catch (error) {
     next(error);
   }

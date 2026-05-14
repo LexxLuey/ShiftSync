@@ -72,11 +72,16 @@ const SideNav = ({
         >
             <Link
                 href={appConfig.authenticatedEntryPath}
-                className="side-nav-header flex flex-col justify-center"
+                className="side-nav-header flex items-center justify-center"
                 style={{ height: HEADER_HEIGHT }}
             >
                 <Logo
-                    imgClass="max-h-10"
+                    imgClass={classNames(
+                        'w-auto object-contain',
+                        sideNavCollapse ? 'max-h-11' : 'max-h-14',
+                    )}
+                    logoWidth={sideNavCollapse ? 44 : 56}
+                    logoHeight={sideNavCollapse ? 44 : 56}
                     mode={mode || defaultMode}
                     type={sideNavCollapse ? 'streamline' : 'full'}
                     className={classNames(

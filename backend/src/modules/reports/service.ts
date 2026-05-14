@@ -1,13 +1,40 @@
+import type { Role } from '@prisma/client';
 import prismaClient from '../../lib/db/prisma.js';
-import { NotFoundError, ValidationError } from '../../lib/errors/customErrors.js';
-import { calculateHoursInRange, calculateWeeklyHours, getConsecutiveDaysWorked } from '../../lib/validation/overtime.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../lib/errors/customErrors.js';
+import { calculateWeeklyHours, getConsecutiveDaysWorked } from '../../lib/validation/overtime.js';
 import { PREMIUM_SHIFT_CONFIG } from '../../lib/constants/premium-shifts.js';
+
+type ReportsActor = {
+  id: string;
+  role: Role;
+};
+
+const ensureLocationScope = async (actor: ReportsActor, locationId: string): Promise<void> => {
+  if (actor.role === 'ADMIN') {
+    return;
+  }
+
+  const managerLocation = await prismaClient.locationManager.findUnique({
+    where: {
+      locationId_userId: {
+        locationId,
+        userId: actor.id,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!managerLocation) {
+    throw new ForbiddenError('You do not have access to this center', { locationId });
+  }
+};
 
 /**
  * Fairness Report - Calculate fairness score for each staff member
  * Fairness score = (premium % / total %) - higher is better distribution
  */
 export const getFairnessReport = async (
+  actor: ReportsActor,
   locationId: string,
   startDate: Date,
   endDate: Date
@@ -23,6 +50,8 @@ export const getFairnessReport = async (
     fairnessScore: number;
   }>
 > => {
+  await ensureLocationScope(actor, locationId);
+
   // Fetch all shifts in period with assignments
   const shifts = await prismaClient.shift.findMany({
     where: {
@@ -117,7 +146,13 @@ export const getFairnessReport = async (
 /**
  * Hours Distribution - Weekly breakdown by user with daily details
  */
-export const getHoursDistribution = async (locationId: string, weekStartDate: Date) => {
+export const getHoursDistribution = async (
+  actor: ReportsActor,
+  locationId: string,
+  weekStartDate: Date,
+) => {
+  await ensureLocationScope(actor, locationId);
+
   const weekEndDate = new Date(weekStartDate);
   weekEndDate.setDate(weekEndDate.getDate() + 7);
 
@@ -220,14 +255,25 @@ export const getHoursDistribution = async (locationId: string, weekStartDate: Da
 /**
  * Shift Projection - Calculate hours if user were assigned
  */
-export const getShiftProjection = async (shiftId: string, proposedUserId?: string) => {
+export const getShiftProjection = async (
+  actor: ReportsActor,
+  shiftId: string,
+  proposedUserId?: string,
+) => {
   const shift = await prismaClient.shift.findUnique({
     where: { id: shiftId },
+    select: {
+      id: true,
+      locationId: true,
+      startTime: true,
+      endTime: true,
+    },
   });
 
   if (!shift) {
     throw new NotFoundError('Shift not found', { shiftId });
   }
+  await ensureLocationScope(actor, shift.locationId);
 
   if (!proposedUserId) {
     throw new ValidationError('proposedUserId is required', { shiftId }, ['Provide a user ID to project assignment']);
@@ -278,8 +324,13 @@ export const getShiftProjection = async (shiftId: string, proposedUserId?: strin
 /**
  * What-If Calculator - Simulate assignments without DB writes
  */
-export const getWhatIfCalculation = async (shiftsArray: Array<{ shiftId: string; userId: string }>) => {
-  const results = await Promise.all(shiftsArray.map((item) => getShiftProjection(item.shiftId, item.userId)));
+export const getWhatIfCalculation = async (
+  actor: ReportsActor,
+  shiftsArray: Array<{ shiftId: string; userId: string }>,
+) => {
+  const results = await Promise.all(
+    shiftsArray.map((item) => getShiftProjection(actor, item.shiftId, item.userId)),
+  );
 
   const summary = {
     totalProposed: shiftsArray.length,

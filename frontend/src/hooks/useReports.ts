@@ -1,35 +1,55 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+'use client'
+
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { reportsService } from '@/lib/api/reportsService'
-import type { NormalizedApiError, WhatIfShiftInput } from '@/lib/api/types'
+import type {
+    NormalizedApiError,
+    WhatIfShiftInput,
+    HoursDistributionResponse,
+    ProjectionResult,
+    WhatIfResult,
+} from '@/lib/api/types'
+
+type HoursDistributionParams = {
+    locationId: string
+    weekStartDate: string
+}
+
+type ProjectionParams = {
+    shiftId: string
+    proposedUserId: string
+}
 
 export default function useReports() {
-    const queryClient = useQueryClient()
+    const useHoursDistributionQuery = (params: HoursDistributionParams | null) =>
+        useQuery<HoursDistributionResponse, NormalizedApiError>({
+            queryKey: ['reports-hours-distribution', params],
+            queryFn: () =>
+                reportsService.getHoursDistribution(
+                    params!.locationId,
+                    params!.weekStartDate,
+                ),
+            enabled: Boolean(params?.locationId && params?.weekStartDate),
+        })
 
-    // Hours distribution query
-    const hoursQuery = useQuery({
-        queryKey: ['hoursDistribution'],
-        queryFn: () => reportsService.getHoursDistribution('', ''),
-        enabled: false, // Must be manually triggered with specific params
-    })
+    const useProjectionQuery = (params: ProjectionParams | null) =>
+        useQuery<ProjectionResult, NormalizedApiError>({
+            queryKey: ['reports-projection', params],
+            queryFn: () => reportsService.getProjection(params!.shiftId, params!.proposedUserId),
+            enabled: Boolean(params?.shiftId && params?.proposedUserId),
+        })
 
-    // Projection mutation (GET but simpler to implement as query)
-    const projectionQuery = useQuery({
-        queryKey: ['projection'],
-        queryFn: () => reportsService.getProjection('', ''),
-        enabled: false,
-    })
-
-    // What-if mutation
-    const whatIfMutation = useMutation<any, NormalizedApiError, WhatIfShiftInput[]>({
+    const whatIfMutation = useMutation<
+        WhatIfResult,
+        NormalizedApiError,
+        WhatIfShiftInput[]
+    >({
         mutationFn: (shifts) => reportsService.postWhatIf(shifts),
-        onSuccess: () => {
-            // Cache invalidation handled by component if needed
-        },
     })
 
     return {
-        hoursQuery,
-        projectionQuery,
+        useHoursDistributionQuery,
+        useProjectionQuery,
         whatIfMutation,
     }
 }

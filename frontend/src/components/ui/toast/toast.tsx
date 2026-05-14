@@ -1,7 +1,9 @@
 import ToastWrapper from './ToastWrapper'
 import { PLACEMENT } from '../utils/constants'
+import Notification from '../Notification'
 import type { ToastProps, ToastWrapperProps } from './ToastWrapper'
 import { NotificationPlacement } from '../@types/placement'
+import { isValidElement } from 'react'
 import type { ReactNode } from 'react'
 
 export const toastDefaultProps = {
@@ -60,14 +62,20 @@ toast.push = (message, options = toastDefaultProps as ToastProps) => {
         id = castPlacment(options.placement as NotificationPlacement)
     }
 
+    const normalizedMessage = isValidElement(message) ? (
+        message
+    ) : (
+        <Notification>{message}</Notification>
+    )
+
     const wrapper = getWrapper(id)
 
     if (wrapper?.current) {
-        return wrapper.current.push(message)
+        return wrapper.current.push(normalizedMessage)
     }
 
     return createWrapper(id ?? '', options).then((ref) => {
-        return ref.current?.push(message)
+        return ref.current?.push(normalizedMessage)
     })
 }
 

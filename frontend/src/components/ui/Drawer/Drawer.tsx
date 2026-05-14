@@ -13,7 +13,7 @@ export interface DrawerProps extends ReactModal.Props {
     headerClass?: string
     height?: string | number
     lockScroll?: boolean
-    onClose?: (e: MouseEvent<HTMLSpanElement>) => void
+    onClose?: (e: MouseEvent<HTMLButtonElement>) => void
     placement?: 'top' | 'right' | 'bottom' | 'left'
     showBackdrop?: boolean
     title?: string | ReactNode
@@ -34,6 +34,7 @@ const Drawer = (props: DrawerProps) => {
         height = 400,
         isOpen,
         lockScroll = true,
+        onRequestClose,
         onClose,
         overlayClassName,
         placement = 'right',
@@ -44,8 +45,19 @@ const Drawer = (props: DrawerProps) => {
         ...rest
     } = props
 
-    const onCloseClick = (e: MouseEvent<HTMLSpanElement>) => {
-        onClose?.(e)
+    const handleDrawerClose = (event?: unknown) => {
+        if (onRequestClose) {
+            onRequestClose(event as Parameters<NonNullable<ReactModal.Props['onRequestClose']>>[0])
+            return
+        }
+
+        if (onClose) {
+            onClose(event as MouseEvent<HTMLButtonElement>)
+        }
+    }
+
+    const onCloseClick = (e: MouseEvent<HTMLButtonElement>) => {
+        handleDrawerClose(e)
     }
 
     const renderCloseButton = <CloseButton onClick={onCloseClick} />
@@ -115,6 +127,7 @@ const Drawer = (props: DrawerProps) => {
             )}
             ariaHideApp={false}
             isOpen={isOpen}
+            onRequestClose={(event) => handleDrawerClose(event)}
             closeTimeoutMS={closeTimeoutMS}
             {...rest}
         >

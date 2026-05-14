@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import useShifts from '@/hooks/useShifts'
+import useShiftTable from '@/hooks/useShiftTable'
 import useSwaps from '@/hooks/useSwaps'
 import SwapRequestModal from '@/components/swaps/SwapRequestModal'
 import SwapDetailModal from '@/components/swaps/SwapDetailModal'
@@ -25,7 +25,11 @@ export default function Page() {
   const isManager = user?.role === 'MANAGER' || user?.role === 'ADMIN'
 
   // Queries
-  const { shiftsQuery } = useShifts(null)
+  const { shiftsQuery } = useShiftTable({
+    page: 1,
+    limit: 200,
+    status: 'PUBLISHED',
+  })
   const { getSwapRequestsQuery } = useSwaps()
 
   const swapsQuery = getSwapRequestsQuery({
@@ -35,7 +39,7 @@ export default function Page() {
 
   // Filter shifts to only assigned ones
   const myShifts = useMemo(() => {
-    const shifts = (shiftsQuery.data?.data ?? shiftsQuery.data?.shifts ?? []) as Shift[]
+    const shifts = (shiftsQuery.data?.data ?? []) as Shift[]
     if (!shifts.length) return []
     return shifts.filter((shift: Shift) =>
       shift.assignments?.some((a) => a.userId === user?.id)

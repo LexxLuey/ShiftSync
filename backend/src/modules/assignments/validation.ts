@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const createAssignmentSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
+  replaceExisting: z.boolean().optional(),
 });
 
 export const overrideAssignmentSchema = z.object({
@@ -21,6 +22,14 @@ export const eligibleStaffQuerySchema = z
     search: z.string().trim().optional(),
     fairnessStartDate: z.string().regex(dateOnlyPattern).optional(),
     fairnessEndDate: z.string().regex(dateOnlyPattern).optional(),
+    replaceExisting: z.preprocess(
+      (value) => {
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return value;
+      },
+      z.boolean().optional(),
+    ),
   })
   .refine(
     (value) =>

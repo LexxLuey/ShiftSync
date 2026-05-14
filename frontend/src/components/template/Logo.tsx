@@ -12,6 +12,7 @@ interface LogoProps extends CommonProps {
 }
 
 const LOGO_SRC_PATH = '/img/logo/'
+const APP_LOGO_FILE = 'cfc-kids-logo.png'
 
 const Logo = (props: LogoProps) => {
     const {
@@ -35,9 +36,10 @@ const Logo = (props: LogoProps) => {
                         className={classNames(
                             '',
                             type === 'full' ? '' : 'hidden',
+                            'object-contain',
                             imgClass,
                         )}
-                        src={`${LOGO_SRC_PATH}logo-light-full.png`}
+                        src={`${LOGO_SRC_PATH}${APP_LOGO_FILE}`}
                         alt={`${APP_NAME} logo`}
                         width={width}
                         height={height}
@@ -47,9 +49,10 @@ const Logo = (props: LogoProps) => {
                         className={classNames(
                             '',
                             type === 'streamline' ? '' : 'hidden',
+                            'object-contain',
                             imgClass,
                         )}
-                        src={`${LOGO_SRC_PATH}logo-light-streamline.png`}
+                        src={`${LOGO_SRC_PATH}${APP_LOGO_FILE}`}
                         alt={`${APP_NAME} logo`}
                         width={width}
                         height={height}
@@ -62,9 +65,10 @@ const Logo = (props: LogoProps) => {
                     <Image
                         className={classNames(
                             type === 'full' ? '' : 'hidden',
+                            'object-contain',
                             imgClass,
                         )}
-                        src={`${LOGO_SRC_PATH}logo-dark-full.png`}
+                        src={`${LOGO_SRC_PATH}${APP_LOGO_FILE}`}
                         alt={`${APP_NAME} logo`}
                         width={width}
                         height={height}
@@ -73,9 +77,10 @@ const Logo = (props: LogoProps) => {
                     <Image
                         className={classNames(
                             type === 'streamline' ? '' : 'hidden',
+                            'object-contain',
                             imgClass,
                         )}
-                        src={`${LOGO_SRC_PATH}logo-dark-streamline.png`}
+                        src={`${LOGO_SRC_PATH}${APP_LOGO_FILE}`}
                         alt={`${APP_NAME} logo`}
                         width={width}
                         height={height}

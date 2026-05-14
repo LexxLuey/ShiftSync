@@ -17,6 +17,7 @@ export type NormalizedApiError = {
 }
 
 export type ShiftStatus = 'DRAFT' | 'PUBLISHED'
+export type ShiftListStatus = ShiftStatus | 'ALL'
 
 export type Skill = {
     id: string
@@ -27,6 +28,13 @@ export type ShiftAssignment = {
     id: string
     userId: string
     status: 'ASSIGNED' | 'PENDING_SWAP'
+    user?: {
+        id: string
+        firstName: string
+        lastName: string
+        email: string
+        role?: 'ADMIN' | 'MANAGER' | 'STAFF'
+    }
 }
 
 export type Shift = {
@@ -42,6 +50,12 @@ export type Shift = {
     status: ShiftStatus
     publishedAt?: string | null
     assignments?: ShiftAssignment[]
+    location?: {
+        id: string
+        name: string
+        timezone?: string
+    }
+    requiredSkill?: Skill
 }
 
 export type PublishWarning = {
@@ -59,6 +73,28 @@ export type GetShiftsByLocationParams = {
     locationId: string
     startDate?: string
     endDate?: string
+}
+
+export type ListShiftsParams = {
+    page?: number
+    limit?: number
+    locationId?: string
+    startDate?: string
+    endDate?: string
+    status?: ShiftListStatus
+    title?: string
+    assignedUserId?: string
+}
+
+export type PaginatedShiftsResponse = {
+    data: Shift[]
+    count: number
+    pagination: {
+        page: number
+        limit: number
+        total: number
+        totalPages: number
+    }
 }
 
 export type CreateShiftPayload = {
@@ -98,7 +134,7 @@ export type CreateAvailabilityPayload = {
     dayOfWeek: number
     startTime: string
     endTime: string
-    locationId?: string
+    locationId: string
 }
 
 export type CreateExceptionPayload = {
@@ -138,6 +174,8 @@ export type EligibleStaffMember = {
     role: string
     available: boolean
     warnings: AssignmentViolation[]
+    hardBlockReasons: string[]
+    isReplaceCapable: boolean
     availabilityIndicator: 'green' | 'yellow' | 'red'
     assignmentCountInWindow: number
     rank: number
@@ -149,10 +187,26 @@ export type GetEligibleStaffParams = {
     search?: string
     fairnessStartDate?: string
     fairnessEndDate?: string
+    replaceExisting?: boolean
 }
 
 export type CreateAssignmentPayload = {
     userId: string
+    replaceExisting?: boolean
+}
+
+export type AssignmentMutationMode = 'assigned' | 'replaced' | 'noop_already_assigned'
+
+export type AssignmentMutationData = {
+    assignment: ShiftAssignment
+    mode: AssignmentMutationMode
+    replacedUserId?: string
+    replacedAssignmentId?: string
+}
+
+export type CreateAssignmentResponse = {
+    success: boolean
+    data: AssignmentMutationData
 }
 
 export type AssignmentResponse = {
@@ -390,6 +444,8 @@ export type CalendarShift = {
     assignments: CalendarAssignment[]
 }
 
+export type CalendarStatusFilter = 'PUBLISHED' | 'DRAFT' | 'ALL'
+
 export type CalendarQuery = {
     startDate: string
     endDate: string
@@ -397,6 +453,7 @@ export type CalendarQuery = {
     title?: string
     assignedUserId?: string
     mine?: boolean
+    status?: CalendarStatusFilter
 }
 
 export type CalendarResponse = {
@@ -482,6 +539,7 @@ export type GeneratedShiftSummary = {
 export type SkippedShiftSummary = Omit<GeneratedShiftSummary, 'shiftId'> & {
     reason: 'already_exists'
     existingShiftId: string
+    existingShiftStatus: ShiftStatus
 }
 
 export type GenerateScheduleResponse = {

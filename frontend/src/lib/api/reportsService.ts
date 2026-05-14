@@ -1,5 +1,10 @@
 import { apiClient } from './client'
-import type { HoursDistributionResponse, ProjectionResult, WhatIfResult, WhatIfShiftInput } from './types'
+import type {
+    HoursDistributionResponse,
+    ProjectionResult,
+    WhatIfResult,
+    WhatIfShiftInput,
+} from './types'
 
 export const reportsService = {
     getHoursDistribution(locationId: string, weekStartDate: string) {

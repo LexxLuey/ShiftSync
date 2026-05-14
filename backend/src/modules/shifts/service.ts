@@ -1,5 +1,6 @@
 import prismaClient from '../../lib/db/prisma.js';
-import { ValidationError, NotFoundError, ConflictError } from '../../lib/errors/customErrors.js';
+import type { Prisma, Role } from '@prisma/client';
+import { ValidationError, NotFoundError, ConflictError, ForbiddenError } from '../../lib/errors/customErrors.js';
 import { logAction } from '../audit/service.js';
 import {
   emitShiftCreated,
@@ -9,6 +10,74 @@ import {
 import { createNotification } from '../notifications/service.js';
 import { syncReminderJobsForPublishedShift } from '../reminders/service.js';
 import type { CreateShiftPayload, UpdateShiftPayload } from './validation.js';
+
+type ShiftListActor = {
+  id: string;
+  role: Role;
+};
+
+type ListShiftsParams = {
+  page: number;
+  limit: number;
+  locationId?: string | undefined;
+  startDate?: string | undefined;
+  endDate?: string | undefined;
+  status?: 'DRAFT' | 'PUBLISHED' | 'ALL' | undefined;
+  title?: string | undefined;
+  assignedUserId?: string | undefined;
+};
+
+const parseUtcDateStart = (dateOnly: string): Date => new Date(`${dateOnly}T00:00:00.000Z`);
+
+const parseUtcDateEndExclusive = (dateOnly: string): Date => {
+  const endDate = parseUtcDateStart(dateOnly);
+  endDate.setUTCDate(endDate.getUTCDate() + 1);
+  return endDate;
+};
+
+const getScopedLocationIdsForActor = async (
+  actor: ShiftListActor,
+  locationId?: string,
+): Promise<string[] | undefined> => {
+  if (actor.role === 'ADMIN') {
+    return locationId ? [locationId] : undefined;
+  }
+
+  if (actor.role === 'MANAGER') {
+    const managerLocations = await prismaClient.locationManager.findMany({
+      where: { userId: actor.id },
+      select: { locationId: true },
+    });
+    const managedLocationIds = managerLocations.map((entry) => entry.locationId);
+
+    if (locationId) {
+      if (!managedLocationIds.includes(locationId)) {
+        throw new ForbiddenError('You do not have access to this center', { locationId });
+      }
+      return [locationId];
+    }
+
+    return managedLocationIds;
+  }
+
+  const certifications = await prismaClient.certification.findMany({
+    where: {
+      userId: actor.id,
+      revokedAt: null,
+    },
+    select: { locationId: true },
+  });
+  const certifiedLocationIds = certifications.map((entry) => entry.locationId);
+
+  if (locationId) {
+    if (!certifiedLocationIds.includes(locationId)) {
+      throw new ForbiddenError('You do not have access to this center', { locationId });
+    }
+    return [locationId];
+  }
+
+  return certifiedLocationIds;
+};
 
 export const createShift = async (
   locationId: string,
@@ -143,6 +212,132 @@ export const getShiftsByLocation = async (
   });
 
   return shifts;
+};
+
+export const listShifts = async (
+  actor: ShiftListActor,
+  query: ListShiftsParams,
+): Promise<{
+  data: unknown[];
+  count: number;
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}> => {
+  const scopedLocationIds = await getScopedLocationIdsForActor(actor, query.locationId);
+  if (scopedLocationIds && scopedLocationIds.length === 0) {
+    return {
+      data: [],
+      count: 0,
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total: 0,
+        totalPages: 1,
+      },
+    };
+  }
+
+  const effectiveStatus =
+    actor.role === 'STAFF'
+      ? 'PUBLISHED'
+      : (query.status ?? 'ALL');
+  const effectiveAssignedUserId =
+    actor.role === 'STAFF'
+      ? actor.id
+      : query.assignedUserId;
+
+  const rangeStart = query.startDate ? parseUtcDateStart(query.startDate) : undefined;
+  const rangeEndExclusive = query.endDate ? parseUtcDateEndExclusive(query.endDate) : undefined;
+
+  const whereClause: Prisma.ShiftWhereInput = {
+    ...(effectiveStatus === 'ALL' ? {} : { status: effectiveStatus }),
+    ...(scopedLocationIds ? { locationId: { in: scopedLocationIds } } : {}),
+    ...(query.title ? { title: { contains: query.title, mode: 'insensitive' } } : {}),
+    ...(effectiveAssignedUserId
+      ? {
+        assignments: {
+          some: {
+            userId: effectiveAssignedUserId,
+            status: 'ASSIGNED',
+          },
+        },
+      }
+      : {}),
+  };
+
+  if (rangeStart || rangeEndExclusive) {
+    const dateFilters: Prisma.ShiftWhereInput[] = [];
+
+    if (rangeStart && rangeEndExclusive) {
+      dateFilters.push({
+        startTime: { lt: rangeEndExclusive },
+        endTime: { gte: rangeStart },
+      });
+    } else if (rangeStart) {
+      dateFilters.push({
+        endTime: { gte: rangeStart },
+      });
+    } else if (rangeEndExclusive) {
+      dateFilters.push({
+        startTime: { lt: rangeEndExclusive },
+      });
+    }
+
+    whereClause.AND = dateFilters;
+  }
+
+  const [total, shifts] = await prismaClient.$transaction([
+    prismaClient.shift.count({ where: whereClause }),
+    prismaClient.shift.findMany({
+      where: whereClause,
+      include: {
+        assignments: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        },
+        location: {
+          select: {
+            id: true,
+            name: true,
+            timezone: true,
+          },
+        },
+        requiredSkill: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ startTime: 'asc' }, { createdAt: 'asc' }],
+      skip: (query.page - 1) * query.limit,
+      take: query.limit,
+    }),
+  ]);
+
+  return {
+    data: shifts,
+    count: shifts.length,
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.limit)),
+    },
+  };
 };
 
 export const getShiftById = async (shiftId: string) => {

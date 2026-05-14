@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { assignmentService } from '@/lib/api/assignments'
 import type {
+    CreateAssignmentResponse,
     CreateAssignmentPayload,
     EligibleStaffMember,
     GetEligibleStaffParams,
@@ -28,12 +29,15 @@ export default function useAssignments() {
      * Create assignment mutation
      */
     const createAssignmentMutation = useMutation<
-        unknown,
+        CreateAssignmentResponse,
         NormalizedApiError,
-        { shiftId: string; userId: string }
+        { shiftId: string; userId: string; replaceExisting?: boolean }
     >({
-        mutationFn: ({ shiftId, userId }) =>
-            assignmentService.createAssignment(shiftId, { userId }),
+        mutationFn: ({ shiftId, userId, replaceExisting }) =>
+            assignmentService.createAssignment(shiftId, {
+                userId,
+                ...(replaceExisting !== undefined ? { replaceExisting } : {}),
+            } as CreateAssignmentPayload),
         onSuccess: () => {
             // Invalidate shifts to refresh assignments
             queryClient.invalidateQueries({ queryKey: ['shifts'] })

@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 import type {
     CreateAssignmentPayload,
+    CreateAssignmentResponse,
     EligibleStaffMember,
     GetEligibleStaffParams,
     ShiftAssignment,
@@ -28,7 +29,10 @@ export const assignmentService = {
      * Create assignment for a staff member to a shift
      */
     createAssignment(shiftId: string, payload: CreateAssignmentPayload) {
-        return apiClient.post<ShiftAssignment>(`/shifts/${shiftId}/assignments`, payload)
+        return apiClient.post<CreateAssignmentResponse>(
+            `/shifts/${shiftId}/assignments`,
+            payload,
+        )
     },
 
     /**

@@ -13,7 +13,7 @@ export const createAvailability = async (userId: string, payload: CreateAvailabi
     where: {
       userId,
       dayOfWeek: payload.dayOfWeek,
-      locationId: payload.locationId || null,
+      locationId: payload.locationId,
       isRecurring: true,
     },
   });
@@ -32,7 +32,7 @@ export const createAvailability = async (userId: string, payload: CreateAvailabi
       dayOfWeek: payload.dayOfWeek,
       startTime: payload.startTime,
       endTime: payload.endTime,
-      locationId: payload.locationId || null,
+      locationId: payload.locationId,
       isRecurring: true,
       validFrom: new Date(),
     },

@@ -23,6 +23,37 @@ const userPublicSelect = {
     updatedAt: true,
 } as const;
 
+const listUserSelect = {
+    ...userPublicSelect,
+    certifications: {
+        where: {
+            revokedAt: null,
+        },
+        select: {
+            id: true,
+            locationId: true,
+            revokedAt: true,
+            location: {
+                select: {
+                    id: true,
+                    name: true,
+                    timezone: true,
+                },
+            },
+        },
+    },
+    skills: {
+        select: {
+            skill: {
+                select: {
+                    id: true,
+                    name: true,
+                },
+            },
+        },
+    },
+} as const;
+
 const ensureUserExists = async (userId: string): Promise<void> => {
     const user = await prismaClient.user.findUnique({
         where: { id: userId },
@@ -49,7 +80,51 @@ const ensureManagerLocationAccess = async (actorId: string, locationId: string):
     }
 };
 
-export const listUsers = async (query: {
+const getManagedLocationIds = async (actorId: string): Promise<string[]> => {
+    const managerLocations = await prismaClient.locationManager.findMany({
+        where: { userId: actorId },
+        select: { locationId: true },
+    });
+
+    return managerLocations.map((entry) => entry.locationId);
+};
+
+const normalizeListUser = (user: {
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    role: Role;
+    phone: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    certifications: Array<{
+        id: string;
+        locationId: string;
+        revokedAt: Date | null;
+        location: { id: string; name: string; timezone: string } | null;
+    }>;
+    skills: Array<{
+        skill: { id: string; name: string } | null;
+    }>;
+}): Record<string, unknown> => ({
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    phone: user.phone,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    certifications: user.certifications,
+    skills: user.skills
+        .map((entry) => entry.skill)
+        .filter((skill): skill is { id: string; name: string } => Boolean(skill)),
+});
+
+export const listUsers = async (
+actor: RequestActor,
+query: {
     page: number;
     limit: number;
     role?: Role | undefined;
@@ -58,17 +133,86 @@ export const listUsers = async (query: {
     data: Record<string, unknown>[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
 }> => {
+    if (actor.role === 'MANAGER') {
+        const managedLocationIds = await getManagedLocationIds(actor.id);
+
+        if (managedLocationIds.length === 0) {
+            return {
+                data: [],
+                pagination: {
+                    page: query.page,
+                    limit: query.limit,
+                    total: 0,
+                    totalPages: 1,
+                },
+            };
+        }
+
+        if (query.locationId && !managedLocationIds.includes(query.locationId)) {
+            throw new ForbiddenError('Manager is not assigned to this location', {
+                locationId: query.locationId,
+            });
+        }
+
+        const scopedLocationIds = query.locationId ? [query.locationId] : managedLocationIds;
+        const whereClause = {
+            ...(query.role ? { role: query.role } : {}),
+            OR: [
+                {
+                    certifications: {
+                        some: {
+                            locationId: {
+                                in: scopedLocationIds,
+                            },
+                            revokedAt: null,
+                        },
+                    },
+                },
+                {
+                    managerLocations: {
+                        some: {
+                            locationId: {
+                                in: scopedLocationIds,
+                            },
+                        },
+                    },
+                },
+            ],
+        };
+
+        const [total, users] = await prismaClient.$transaction([
+            prismaClient.user.count({ where: whereClause }),
+            prismaClient.user.findMany({
+                where: whereClause,
+                select: listUserSelect,
+                skip: (query.page - 1) * query.limit,
+                take: query.limit,
+                orderBy: { createdAt: 'desc' },
+            }),
+        ]);
+
+        return {
+            data: users.map(normalizeListUser),
+            pagination: {
+                page: query.page,
+                limit: query.limit,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / query.limit)),
+            },
+        };
+    }
+
     const whereClause = {
         ...(query.role ? { role: query.role } : {}),
         ...(query.locationId
             ? {
-                certifications: {
-                    some: {
-                        locationId: query.locationId,
-                        revokedAt: null,
-                    },
-                },
-            }
+                  certifications: {
+                      some: {
+                          locationId: query.locationId,
+                          revokedAt: null,
+                      },
+                  },
+              }
             : {}),
     };
 
@@ -76,7 +220,7 @@ export const listUsers = async (query: {
         prismaClient.user.count({ where: whereClause }),
         prismaClient.user.findMany({
             where: whereClause,
-            select: userPublicSelect,
+            select: listUserSelect,
             skip: (query.page - 1) * query.limit,
             take: query.limit,
             orderBy: { createdAt: 'desc' },
@@ -84,7 +228,7 @@ export const listUsers = async (query: {
     ]);
 
     return {
-        data: users as unknown as Record<string, unknown>[],
+        data: users.map(normalizeListUser),
         pagination: {
             page: query.page,
             limit: query.limit,
@@ -94,7 +238,53 @@ export const listUsers = async (query: {
     };
 };
 
-export const getUserById = async (userId: string): Promise<Record<string, unknown>> => {
+export const getUserById = async (
+    actor: RequestActor,
+    userId: string,
+): Promise<Record<string, unknown>> => {
+    if (actor.role !== 'ADMIN' && actor.id !== userId) {
+        if (actor.role !== 'MANAGER') {
+            throw new ForbiddenError('You can only view your own profile');
+        }
+
+        const managedLocationIds = await getManagedLocationIds(actor.id);
+        if (managedLocationIds.length === 0) {
+            throw new ForbiddenError('Manager does not have access to this user');
+        }
+
+        const hasScopedAccess = await prismaClient.user.findFirst({
+            where: {
+                id: userId,
+                OR: [
+                    {
+                        certifications: {
+                            some: {
+                                locationId: {
+                                    in: managedLocationIds,
+                                },
+                                revokedAt: null,
+                            },
+                        },
+                    },
+                    {
+                        managerLocations: {
+                            some: {
+                                locationId: {
+                                    in: managedLocationIds,
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+            select: { id: true },
+        });
+
+        if (!hasScopedAccess) {
+            throw new ForbiddenError('Manager does not have access to this user');
+        }
+    }
+
     const user = await prismaClient.user.findUnique({
         where: { id: userId },
         select: {

@@ -6,7 +6,7 @@ export const createAvailabilitySchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   startTime: timeStringSchema,
   endTime: timeStringSchema,
-  locationId: z.string().optional(),
+  locationId: z.uuid(),
 });
 
 export const createExceptionSchema = z.object({

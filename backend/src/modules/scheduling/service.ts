@@ -1,4 +1,4 @@
-import type { EventTemplateScope, Role } from '@prisma/client';
+import type { EventTemplateScope, Role, ShiftStatus } from '@prisma/client';
 import { fromZonedTime } from 'date-fns-tz';
 import { acquireLock, releaseLock } from '../../lib/redis/lock.js';
 import prismaClient from '../../lib/db/prisma.js';
@@ -56,6 +56,7 @@ type GeneratedShiftSummary = {
 type SkippedShiftSummary = Omit<GeneratedShiftSummary, 'shiftId'> & {
   reason: 'already_exists';
   existingShiftId: string;
+  existingShiftStatus: ShiftStatus;
 };
 
 const parseTimeToMinutes = (value: string): number => {
@@ -332,6 +333,7 @@ export const generateScheduleFromTemplates = async (
               },
               select: {
                 id: true,
+                status: true,
               },
             });
 
@@ -351,6 +353,7 @@ export const generateScheduleFromTemplates = async (
                 endTime: shiftEndUtc.toISOString(),
                 reason: 'already_exists',
                 existingShiftId: existingShift.id,
+                existingShiftStatus: existingShift.status,
               });
               continue;
             }

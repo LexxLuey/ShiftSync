@@ -49,6 +49,12 @@ calendarRouter.use(authenticate);
  *         required: false
  *         schema:
  *           type: boolean
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [PUBLISHED, DRAFT, ALL]
  *     responses:
  *       200:
  *         description: Calendar shifts list
@@ -56,4 +62,3 @@ calendarRouter.use(authenticate);
 calendarRouter.get('/', getCalendar);
 
 export default calendarRouter;
-

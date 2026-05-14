@@ -26,8 +26,9 @@ const getRequestActor = (request: Request): { id: string; role: Role } => {
 
 export const getUsers = async (request: Request, response: Response, next: NextFunction): Promise<void> => {
     try {
+        const actor = getRequestActor(request);
         const query = validateSchema(paginationQuerySchema, request.query);
-        const result = await listUsers(query);
+        const result = await listUsers(actor, query);
         response.status(200).json(result);
     } catch (error) {
         next(error);
@@ -38,12 +39,7 @@ export const getUser = async (request: Request, response: Response, next: NextFu
     try {
         const actor = getRequestActor(request);
         const params = validateSchema(uuidParamSchema, request.params);
-
-        if (actor.role !== 'ADMIN' && actor.id !== params.id) {
-            throw new ForbiddenError('You can only view your own profile');
-        }
-
-        const user = await getUserById(params.id);
+        const user = await getUserById(actor, params.id);
         response.status(200).json({ data: user });
     } catch (error) {
         next(error);

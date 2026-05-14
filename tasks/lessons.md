@@ -274,3 +274,87 @@ When reading `query.error` with custom normalized error contracts, first cast th
 
 Pattern to Watch:
 frontend query/mutation error rendering paths in new pages
+
+### 16. Reassign Flows Must Be Atomic for Headcount-1 Slots
+
+Mistake:
+UI allowed remove-then-assign as separate operations, leading to false success perception and "full capacity" errors during reassignment.
+
+Root Cause:
+Assignment API lacked an atomic replace path and frontend treated assignment refresh failures as empty assignment state.
+
+Prevention Rule:
+For single-headcount shifts, support explicit atomic reassignment on backend and keep frontend assignment state truthful on refresh failures (never silently coerce to empty).
+
+Pattern to Watch:
+schedule-builder reassignment UX, assignment modals, and any optimistic update paths that depend on follow-up refetch.
+
+### 17. Candidate Eligibility and Mutation Validation Must Share the Same Rule Mode
+
+Mistake:
+Eligible-staff lookup evaluated standard assignment mode while confirm action executed replace mode, causing "qualified" UI states that failed on submit.
+
+Root Cause:
+Headcount short-circuit in eligibility check masked deeper blockers (availability/overlap/overtime/48h), while mutation path evaluated them.
+
+Prevention Rule:
+Whenever mutation behavior has modes (assign vs replace), expose the same mode in eligibility/read endpoints and evaluate with identical validation options.
+
+Pattern to Watch:
+all "preview then confirm" flows (eligible staff, swap targets, publish previews) where read-path and write-path can drift.
+
+### 13. Route Authority and API RBAC Must Stay Aligned
+
+Mistake:
+Frontend exposed staff-management screens to managers while backend `/users` list endpoint was admin-only.
+
+Root Cause:
+Route authority and backend `restrictTo` rules were changed in different phases without a parity check.
+
+Prevention Rule:
+For every protected page, verify matching backend endpoint role matrix before release. Add a checklist item: "frontend route authority == backend endpoint authority".
+
+Pattern to Watch:
+`/staff`, `/users`, manager-scoped operational pages.
+
+### 14. Calendar UX Requires Explicit Event Click Handlers
+
+Mistake:
+Calendar rendered shifts but had no event click behavior, making events feel broken.
+
+Root Cause:
+Assumed visual rendering was sufficient without interaction acceptance criteria.
+
+Prevention Rule:
+Any calendar/list card showing schedule entries must define click behavior (details modal, navigation, or action panel) and include a test for it.
+
+Pattern to Watch:
+`/schedule` calendar views and any FullCalendar wrappers.
+
+### 18. Operational Pages Need Collection Endpoints, Not Raw-ID Utility Flows
+
+Mistake:
+`/shifts` depended on a location-id utility flow, which made core operations hard to use and blocked FRD-style filtering.
+
+Root Cause:
+The API shape optimized for low-level utility calls (`/locations/:id/shifts`) instead of role-scoped table operations.
+
+Prevention Rule:
+For operational management pages, define a dedicated collection endpoint with pagination, filters, and server-enforced role/location scope.
+
+Pattern to Watch:
+Any management surface that currently asks users for raw IDs or lacks combined filters.
+
+### 19. Never Mount a Router With Root List Endpoints Under Multiple Unrelated Prefixes
+
+Mistake:
+Swap router (with `GET /`) was mounted under both `/swap-requests` and `/shifts`, which caused `/api/v1/shifts` to return swap-list payload shape.
+
+Root Cause:
+A shared router mixed shift-scoped routes and collection routes, then got mounted on multiple bases.
+
+Prevention Rule:
+Split routers by resource root (`shift-scoped` vs `collection`) before mounting; avoid ambiguous `GET /` handlers on multi-mounted routers.
+
+Pattern to Watch:
+Modules mounted under two prefixes where one router includes root-level handlers.

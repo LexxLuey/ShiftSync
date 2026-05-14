@@ -106,7 +106,9 @@ const StackedSideNavMini = (props: StackedSideNavMiniProps) => {
                 style={{ height: HEADER_HEIGHT }}
             >
                 <Logo
-                    imgClass="max-h-10"
+                    imgClass="max-h-11 w-auto object-contain"
+                    logoWidth={44}
+                    logoHeight={44}
                     mode={mode}
                     type="streamline"
                     className={SIDE_NAV_CONTENT_GUTTER}
