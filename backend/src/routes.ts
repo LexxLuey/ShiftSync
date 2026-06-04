@@ -14,6 +14,7 @@ import eventTemplatesRouter from './modules/event-templates/routes.js';
 import schedulingRouter from './modules/scheduling/routes.js';
 import skillsRouter from './modules/skills/routes.js';
 import calendarRouter from './modules/calendar/routes.js';
+import dashboardRouter from './modules/dashboard/routes.js';
 
 const mainRouter = Router();
 
@@ -35,6 +36,7 @@ mainRouter.use('/event-templates', eventTemplatesRouter);
 mainRouter.use('/schedules', schedulingRouter);
 mainRouter.use('/skills', skillsRouter);
 mainRouter.use('/calendar', calendarRouter);
+mainRouter.use('/dashboard', dashboardRouter);
 // Add more as needed
 
 export default mainRouter;

@@ -29,13 +29,5 @@ export type AuthSession = {
 } | null
 
 export const getRoleHomePath = (role?: AppRole | null): string => {
-    if (role === 'MANAGER') {
-        return '/schedule'
-    }
-
-    if (role === 'STAFF') {
-        return '/schedule'
-    }
-
     return '/home'
 }

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import type { Role } from '@prisma/client';
 import {
     addCertificationSchema,
+    createUserSchema,
     paginationQuerySchema,
     updateUserSchema,
     uuidParamSchema,
@@ -10,6 +11,8 @@ import {
 import { ForbiddenError } from '../../lib/errors/customErrors.js';
 import {
     addCertification,
+    createUser,
+    deactivateUser,
     getUserById,
     listUsers,
     revokeCertification,
@@ -30,6 +33,21 @@ export const getUsers = async (request: Request, response: Response, next: NextF
         const query = validateSchema(paginationQuerySchema, request.query);
         const result = await listUsers(actor, query);
         response.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const createManagedUser = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const actor = getRequestActor(request);
+        const payload = validateSchema(createUserSchema, request.body);
+        const user = await createUser(actor, payload);
+        response.status(201).json({ data: user });
     } catch (error) {
         next(error);
     }
@@ -57,6 +75,21 @@ export const updateUserProfile = async (
         const payload = validateSchema(updateUserSchema, request.body);
 
         const user = await updateUser(actor, params.id, payload);
+        response.status(200).json({ data: user });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deactivateManagedUser = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const actor = getRequestActor(request);
+        const params = validateSchema(uuidParamSchema, request.params);
+        const user = await deactivateUser(actor, params.id);
         response.status(200).json({ data: user });
     } catch (error) {
         next(error);

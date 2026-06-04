@@ -596,3 +596,66 @@ Concurrency considerations:
 
 Time zone considerations:
 - No change to timezone logic; this fix is routing + API shape alignment.
+
+---
+
+# Admin Dashboard + CRUD Todo
+
+## Plan
+
+- [x] Add user and center soft-delete schema fields linked to inactive-login and history-preservation business rules.
+- [x] Add scoped dashboard summary service linked to role/location visibility business rules.
+- [x] Add admin/manager user create/update/deactivate service methods linked to scoped user-management business rules.
+- [x] Add admin center update/deactivate service methods linked to center-management business rules.
+- [x] Add frontend dashboard cards linked to role/location-aware operational stats.
+- [x] Add user create/edit/deactivate UI linked to admin/manager user-management rules.
+- [x] Add center create/edit/deactivate UI linked to admin center-management rules.
+- [x] Add navigation/routes/API contracts linked to discoverability and role visibility rules.
+- [x] Verify backend/frontend builds; manual role scope, timezone, audit, and schedule-builder smoke checks still require a running app/DB.
+
+## Verification Checklist
+
+- [ ] Admin can create manager/staff/admin across any active center.
+- [ ] Manager can create non-admin users only in managed active centers.
+- [ ] Manager cannot create admin or assign unmanaged centers.
+- [ ] Deactivated user cannot log in and is hidden from default user lists.
+- [ ] Admin can create/update/deactivate centers with valid IANA timezone.
+- [x] Manager/staff center lists remain scoped to active centers in code paths; live smoke verified migrated columns only.
+- [x] Dashboard summary scoped query compiles and migrated columns smoke query succeeds; role-specific API smoke not run.
+- [x] Schedule builder remains routed and frontend build includes `/schedule-builder`.
+- [x] `npm run build` passes in `backend`.
+- [x] `npm run build` passes in `frontend`.
+
+
+## Review Summary
+What changed:
+- Added soft-deactivation fields for users and centers plus migration `20260604123000_admin_dashboard_crud`.
+- Added scoped dashboard API and frontend dashboard at `/home` for admin, manager, and staff roles.
+- Added admin/manager user create/update/deactivate backend service methods and frontend modal workflow on `/staff`.
+- Added admin center create/update/deactivate backend support and frontend `/centers` page.
+- Updated nav/routes so Dashboard is visible to all authenticated roles, Users to admin/manager, and Centers to admin only.
+
+Why:
+- Unblock director/admin operational setup while preserving KISS domain rules: existing roles, existing centers, existing schedule-builder/shift flows.
+
+Edge cases handled:
+- Managers cannot create/promote admins or assign users outside managed active centers.
+- Admin users do not require center assignment; manager/staff users require at least one center.
+- Deactivated users cannot log in and are filtered from default user lists.
+- Deactivated centers are filtered from scoped location lists and shift/dashboard queries.
+
+Concurrency considerations:
+- No scheduling assignment concurrency path changed.
+- User/center mutations run in DB transactions with audit log writes in the same transaction.
+
+Time zone considerations:
+- Center create/update keeps IANA timezone validation in backend and frontend.
+- Dashboard displays upcoming shift times using center timezone while preserving UTC DB timestamps.
+
+Verification notes:
+- `npm run prisma:generate` passed in `backend`.
+- `npm run build` passed in `backend`.
+- `npm run build` passed in `frontend`.
+- Applied `20260604123000_admin_dashboard_crud` to the local DB with `npx prisma migrate deploy` after runtime logs showed missing columns.
+- Ran a read-only Prisma smoke query against `Location.isActive/deletedAt` and `User.isActive/deletedAt`: `{ "locations": 3, "users": 18 }`.
+- Full browser CRUD smoke checks were not executed in this verification pass.

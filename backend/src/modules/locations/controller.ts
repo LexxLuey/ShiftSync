@@ -11,6 +11,7 @@ import {
 import {
     assignManager,
     createLocation,
+    deactivateLocation,
     listLocationsByActor,
     removeManager,
     updateLocation,
@@ -44,8 +45,9 @@ export const createLocationRecord = async (
     next: NextFunction,
 ): Promise<void> => {
     try {
+        const actor = getRequestActor(request);
         const payload = validateSchema(createLocationSchema, request.body);
-        const location = await createLocation(payload);
+        const location = await createLocation(actor, payload);
         response.status(201).json({ data: location });
     } catch (error) {
         next(error);
@@ -58,9 +60,25 @@ export const updateLocationRecord = async (
     next: NextFunction,
 ): Promise<void> => {
     try {
+        const actor = getRequestActor(request);
         const params = validateSchema(uuidParamSchema, request.params);
         const payload = validateSchema(updateLocationSchema, request.body);
-        const location = await updateLocation(params.id, payload);
+        const location = await updateLocation(actor, params.id, payload);
+        response.status(200).json({ data: location });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const deactivateLocationRecord = async (
+    request: Request,
+    response: Response,
+    next: NextFunction,
+): Promise<void> => {
+    try {
+        const actor = getRequestActor(request);
+        const params = validateSchema(uuidParamSchema, request.params);
+        const location = await deactivateLocation(actor, params.id);
         response.status(200).json({ data: location });
     } catch (error) {
         next(error);

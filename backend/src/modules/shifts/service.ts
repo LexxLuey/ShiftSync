@@ -90,7 +90,7 @@ export const createShift = async (
       where: { id: locationId },
     });
 
-    if (!location) {
+    if (!location || !location.isActive || location.deletedAt) {
       throw new NotFoundError('Location not found', { locationId });
     }
 
@@ -189,6 +189,10 @@ export const getShiftsByLocation = async (
   const shifts = await prismaClient.shift.findMany({
     where: {
       locationId,
+      location: {
+        isActive: true,
+        deletedAt: null,
+      },
       startTime: { gte: startDate },
       endTime: { lte: endDate },
     },
@@ -254,6 +258,10 @@ export const listShifts = async (
   const rangeEndExclusive = query.endDate ? parseUtcDateEndExclusive(query.endDate) : undefined;
 
   const whereClause: Prisma.ShiftWhereInput = {
+    location: {
+      isActive: true,
+      deletedAt: null,
+    },
     ...(effectiveStatus === 'ALL' ? {} : { status: effectiveStatus }),
     ...(scopedLocationIds ? { locationId: { in: scopedLocationIds } } : {}),
     ...(query.title ? { title: { contains: query.title, mode: 'insensitive' } } : {}),

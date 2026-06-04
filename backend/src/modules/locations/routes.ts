@@ -3,6 +3,7 @@ import { authenticate, restrictTo } from '../auth/middleware.js';
 import {
     assignLocationManager,
     createLocationRecord,
+    deactivateLocationRecord,
     getLocations,
     removeLocationManager,
     updateLocationRecord,
@@ -133,6 +134,7 @@ locationsRouter.post('/', restrictTo('ADMIN'), createLocationRecord);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 locationsRouter.put('/:id', restrictTo('ADMIN'), updateLocationRecord);
+locationsRouter.delete('/:id', restrictTo('ADMIN'), deactivateLocationRecord);
 
 /**
  * @openapi

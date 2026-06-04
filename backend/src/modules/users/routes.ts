@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import { authenticate, restrictTo } from '../auth/middleware.js';
 import {
+    createManagedUser,
     createCertification,
+    deactivateManagedUser,
     getUser,
     getUsers,
     removeCertification,
@@ -53,6 +55,7 @@ usersRouter.use(authenticate);
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 usersRouter.get('/', restrictTo('ADMIN', 'MANAGER'), getUsers);
+usersRouter.post('/', restrictTo('ADMIN', 'MANAGER'), createManagedUser);
 
 /**
  * @openapi
@@ -142,6 +145,7 @@ usersRouter.get('/', restrictTo('ADMIN', 'MANAGER'), getUsers);
  */
 usersRouter.get('/:id', getUser);
 usersRouter.put('/:id', updateUserProfile);
+usersRouter.delete('/:id', restrictTo('ADMIN', 'MANAGER'), deactivateManagedUser);
 
 /**
  * @openapi
