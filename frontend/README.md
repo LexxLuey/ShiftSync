@@ -2,7 +2,7 @@
 
 Next.js frontend for ShiftSync.
 
-- Repo: https://github.com/LexxLuey/ShiftSync
+- Repo: [https://github.com/LexxLuey/ShiftSync](https://github.com/LexxLuey/ShiftSync)
 
 ## Stack
 
@@ -21,8 +21,8 @@ npm install
 Create/update local env (`.env.local`):
 
 ```env
-NEXT_PUBLIC_API_BASE_URL=http://localhost:4000
-NEXT_PUBLIC_SOCKET_URL=http://localhost:4000
+NEXT_PUBLIC_API_BASE_URL=http://localhost:5000
+NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
 ```
 
 ## Run
@@ -66,3 +66,4 @@ If backend seed was run:
 - Ensure backend is running and reachable from frontend.
 - Main API calls go to backend `/api/v1` through `NEXT_PUBLIC_API_BASE_URL`.
 - Recurring availability requires selecting a center (location) on `/availability`.
+- If Event Templates shows no selectable skills, seed backend data from `backend/` with `npm run seed`.

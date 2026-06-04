@@ -9,8 +9,12 @@ export default function useSkills() {
         queryKey: ['skills'],
         queryFn: async () => {
             const response = await skillService.getSkills()
+            const skills = Array.isArray(response.data)
+                ? (response.data as Skill[])
+                : []
+
             return {
-                skills: (response.data || []) as Skill[],
+                skills,
             }
         },
     })

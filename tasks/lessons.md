@@ -218,6 +218,20 @@ infrastructure-backed clients (Redis, queues, brokers) initialized during app st
 
 ### 12. Exact Optional Types Require Omitted Keys, Not Undefined Values
 
+### 13. Surface Prerequisite Catalog Failures Before Submit
+
+Mistake:
+Template form surfaced a generic requirement validation error when skill catalog was empty or failed to load.
+
+Root Cause:
+UI allowed submission path without first checking foundational catalog readiness (skills).
+
+Prevention Rule:
+For forms that depend on reference catalogs, block submit and show explicit load/empty-state guidance when catalogs are unavailable.
+
+Pattern to Watch:
+event templates, schedule builder, any create/update form with required select options
+
 Mistake:
 Passed `{ key: undefined }` into service methods while `exactOptionalPropertyTypes` was enabled, causing compile failures.
 

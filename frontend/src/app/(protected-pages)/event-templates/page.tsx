@@ -78,6 +78,15 @@ const EventTemplatesPage = () => {
         [skillsQuery.data],
     )
 
+    const isSkillsLoading = skillsQuery.isLoading
+    const isSkillsError = skillsQuery.isError
+    const hasSkills = skillOptions.length > 0
+
+    const skillsErrorMessage =
+        skillsQuery.error instanceof Error
+            ? skillsQuery.error.message
+            : 'Failed to load skills catalog.'
+
     const templates = templatesQuery.data?.data || []
     const templatesErrorMessage =
         templatesQuery.error instanceof Error
@@ -154,6 +163,18 @@ const EventTemplatesPage = () => {
             return 'Template title is required'
         }
 
+        if (isSkillsLoading) {
+            return 'Skills are still loading. Please wait a moment and try again.'
+        }
+
+        if (isSkillsError) {
+            return 'Skills catalog could not be loaded. Resolve the connection issue and retry.'
+        }
+
+        if (!hasSkills) {
+            return 'No skills available. Seed or create skills before templating.'
+        }
+
         if (scope === 'LOCATION' && !locationId) {
             return 'Select a center for location templates'
         }
@@ -209,7 +230,12 @@ const EventTemplatesPage = () => {
             resetForm()
         } catch (error) {
             const normalized = error as NormalizedApiError
-            setFormError(normalized.message || 'Failed to save template.')
+            const baseMessage = normalized.message || 'Failed to save template.'
+            const statusSuffix = normalized.status
+                ? ` (HTTP ${normalized.status})`
+                : ''
+
+            setFormError(`${baseMessage}${statusSuffix}`)
         }
     }
 
@@ -336,10 +362,33 @@ const EventTemplatesPage = () => {
                     <div className="space-y-3">
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium">Requirements</h3>
-                            <Button size="sm" type="button" onClick={addRequirement}>
+                            <Button
+                                size="sm"
+                                type="button"
+                                onClick={addRequirement}
+                                disabled={isSkillsLoading || isSkillsError || !hasSkills}
+                            >
                                 Add Requirement
                             </Button>
                         </div>
+
+                        {isSkillsLoading ? (
+                            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                                Loading skills catalog...
+                            </div>
+                        ) : null}
+
+                        {isSkillsError ? (
+                            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                Unable to load skills catalog: {skillsErrorMessage}
+                            </div>
+                        ) : null}
+
+                        {!isSkillsLoading && !isSkillsError && !hasSkills ? (
+                            <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
+                                No skills found. Run backend seed data or add skills first.
+                            </div>
+                        ) : null}
 
                         {requirements.map((requirement, index) => (
                             <div
@@ -355,6 +404,7 @@ const EventTemplatesPage = () => {
                                         ) || null
                                     }
                                     options={skillOptions}
+                                    isDisabled={isSkillsLoading || isSkillsError || !hasSkills}
                                     onChange={(option) =>
                                         setRequirement(index, {
                                             requiredSkillId: option?.value || '',
@@ -409,6 +459,7 @@ const EventTemplatesPage = () => {
                                 createTemplateMutation.isPending ||
                                 updateTemplateMutation.isPending
                             }
+                            disabled={isSkillsLoading || isSkillsError || !hasSkills}
                         >
                             {editingTemplateId ? 'Update Template' : 'Create Template'}
                         </Button>
