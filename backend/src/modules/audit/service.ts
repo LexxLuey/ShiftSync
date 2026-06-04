@@ -20,6 +20,7 @@ export type AuditAction =
 export type AuditEntity =
     | 'SHIFT'
     | 'EVENT_TEMPLATE'
+    | 'SKILL'
     | 'ASSIGNMENT'
     | 'SWAP_REQUEST'
     | 'USER'

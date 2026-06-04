@@ -18,6 +18,14 @@ export const protectedRoutes: Routes = {
             pageContainerType: 'contained',
         },
     },
+    '/skills': {
+        key: 'skills',
+        authority: ['ADMIN'],
+        meta: {
+            pageBackgroundType: 'plain',
+            pageContainerType: 'contained',
+        },
+    },
     '/schedule': {
         key: 'schedule',
         authority: ['ADMIN', 'MANAGER', 'STAFF'],

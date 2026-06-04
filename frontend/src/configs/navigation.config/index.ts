@@ -34,6 +34,16 @@ const navigationConfig: NavigationTree[] = [
         subMenu: [],
     },
     {
+        key: 'skills',
+        path: '/skills',
+        title: 'Skills',
+        translateKey: 'nav.skills',
+        icon: 'documentText',
+        type: NAV_ITEM_TYPE_ITEM,
+        authority: ['ADMIN'],
+        subMenu: [],
+    },
+    {
         key: 'schedule',
         path: '/schedule',
         title: 'Schedule',

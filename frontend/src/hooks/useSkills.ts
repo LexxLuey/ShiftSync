@@ -1,10 +1,17 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Skill } from '@/lib/api/types'
-import { skillService } from '@/lib/api/skills'
+import {
+    skillService,
+    type CreateSkillPayload,
+    type UpdateSkillPayload,
+} from '@/lib/api/skills'
+import type { NormalizedApiError } from '@/lib/api/types'
 
 export default function useSkills() {
+    const queryClient = useQueryClient()
+
     const skillsQuery = useQuery({
         queryKey: ['skills'],
         queryFn: async () => {
@@ -19,5 +26,44 @@ export default function useSkills() {
         },
     })
 
-    return skillsQuery
+    const createSkillMutation = useMutation<
+        { data: Skill },
+        NormalizedApiError,
+        CreateSkillPayload
+    >({
+        mutationFn: (payload) => skillService.createSkill(payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['skills'] })
+        },
+    })
+
+    const updateSkillMutation = useMutation<
+        { data: Skill },
+        NormalizedApiError,
+        { skillId: string; payload: UpdateSkillPayload }
+    >({
+        mutationFn: ({ skillId, payload }) =>
+            skillService.updateSkill(skillId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['skills'] })
+        },
+    })
+
+    const deleteSkillMutation = useMutation<
+        { data: Skill },
+        NormalizedApiError,
+        string
+    >({
+        mutationFn: (skillId) => skillService.deleteSkill(skillId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['skills'] })
+        },
+    })
+
+    return {
+        ...skillsQuery,
+        createSkillMutation,
+        updateSkillMutation,
+        deleteSkillMutation,
+    }
 }

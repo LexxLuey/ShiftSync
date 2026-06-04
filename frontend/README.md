@@ -66,4 +66,5 @@ If backend seed was run:
 - Ensure backend is running and reachable from frontend.
 - Main API calls go to backend `/api/v1` through `NEXT_PUBLIC_API_BASE_URL`.
 - Recurring availability requires selecting a center (location) on `/availability`.
+- Admins and managers can manage the live skills catalog at `/skills`.
 - If Event Templates shows no selectable skills, seed backend data from `backend/` with `npm run seed`.
