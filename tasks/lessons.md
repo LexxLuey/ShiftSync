@@ -358,3 +358,17 @@ Split routers by resource root (`shift-scoped` vs `collection`) before mounting;
 
 Pattern to Watch:
 Modules mounted under two prefixes where one router includes root-level handlers.
+
+### 13. Build Passing Does Not Apply DB Migrations
+
+Mistake:
+Declared implementation verified after TypeScript builds while the live database still lacked newly-added Prisma columns.
+
+Root Cause:
+Verified generated client/schema compilation but did not run or confirm migration deployment against the local database before runtime smoke testing.
+
+Prevention Rule:
+After Prisma schema changes, run `prisma generate`, apply migrations with `prisma migrate deploy` or `prisma migrate dev`, then run a DB smoke query against new fields before claiming runtime readiness.
+
+Pattern to Watch:
+Any feature adding Prisma model fields used immediately by API list/count queries.

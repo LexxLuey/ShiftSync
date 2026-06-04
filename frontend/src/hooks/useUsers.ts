@@ -23,6 +23,36 @@ export default function useUsers(params: UsersListParams) {
         queryFn: () => userService.listUsers(stableParams),
     })
 
+    const createUserMutation = useMutation({
+        mutationFn: userService.createUser,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+        },
+    })
+
+    const updateUserMutation = useMutation({
+        mutationFn: ({
+            userId,
+            payload,
+        }: {
+            userId: string
+            payload: Parameters<typeof userService.updateUser>[1]
+        }) => userService.updateUser(userId, payload),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+        },
+    })
+
+    const deactivateUserMutation = useMutation({
+        mutationFn: userService.deactivateUser,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['users'] })
+            queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] })
+        },
+    })
+
     const addCertificationMutation = useMutation<
         unknown,
         NormalizedApiError,
@@ -49,6 +79,9 @@ export default function useUsers(params: UsersListParams) {
 
     return {
         usersQuery,
+        createUserMutation,
+        updateUserMutation,
+        deactivateUserMutation,
         addCertificationMutation,
         revokeCertificationMutation,
     }

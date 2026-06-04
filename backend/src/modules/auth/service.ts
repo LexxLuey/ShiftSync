@@ -13,6 +13,8 @@ const userPublicSelect = {
     lastName: true,
     role: true,
     phone: true,
+    isActive: true,
+    deletedAt: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -99,12 +101,14 @@ export const loginUser = async (payload: {
             lastName: true,
             role: true,
             phone: true,
+            isActive: true,
+            deletedAt: true,
             createdAt: true,
             updatedAt: true,
         },
     });
 
-    if (!user) {
+    if (!user || !user.isActive || user.deletedAt) {
         throw new AuthError('Invalid email or password', null, ['Check your credentials and retry.']);
     }
 

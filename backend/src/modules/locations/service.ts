@@ -1,4 +1,4 @@
-import type { Role } from '@prisma/client';
+import type { Prisma, Role } from '@prisma/client';
 import prismaClient from '../../lib/db/prisma.js';
 import {
     ConflictError,
@@ -16,6 +16,8 @@ const locationSelect = {
     name: true,
     address: true,
     timezone: true,
+    isActive: true,
+    deletedAt: true,
     createdAt: true,
     updatedAt: true,
 } as const;
@@ -23,6 +25,10 @@ const locationSelect = {
 export const listLocationsByActor = async (actor: RequestActor): Promise<Record<string, unknown>[]> => {
     if (actor.role === 'ADMIN') {
         const locations = await prismaClient.location.findMany({
+            where: {
+                isActive: true,
+                deletedAt: null,
+            },
             select: locationSelect,
             orderBy: { createdAt: 'desc' },
         });
@@ -31,7 +37,13 @@ export const listLocationsByActor = async (actor: RequestActor): Promise<Record<
 
     if (actor.role === 'MANAGER') {
         const locationLinks = await prismaClient.locationManager.findMany({
-            where: { userId: actor.id },
+            where: {
+                userId: actor.id,
+                location: {
+                    isActive: true,
+                    deletedAt: null,
+                },
+            },
             select: {
                 location: {
                     select: locationSelect,
@@ -47,6 +59,10 @@ export const listLocationsByActor = async (actor: RequestActor): Promise<Record<
         where: {
             userId: actor.id,
             revokedAt: null,
+            location: {
+                isActive: true,
+                deletedAt: null,
+            },
         },
         select: {
             location: {
@@ -59,20 +75,42 @@ export const listLocationsByActor = async (actor: RequestActor): Promise<Record<
     return certifications.map((item) => item.location) as unknown as Record<string, unknown>[];
 };
 
-export const createLocation = async (payload: {
-    name: string;
-    address: string;
-    timezone: string;
-}): Promise<Record<string, unknown>> => {
-    const location = await prismaClient.location.create({
-        data: payload,
-        select: locationSelect,
+export const createLocation = async (
+    actor: RequestActor,
+    payload: {
+        name: string;
+        address: string;
+        timezone: string;
+    },
+): Promise<Record<string, unknown>> => {
+    const location = await prismaClient.$transaction(async (tx) => {
+        const created = await tx.location.create({
+            data: {
+                ...payload,
+                isActive: true,
+                deletedAt: null,
+            },
+            select: locationSelect,
+        });
+
+        await tx.auditLog.create({
+            data: {
+                userId: actor.id,
+                action: 'CREATE',
+                entityType: 'LOCATION',
+                entityId: created.id,
+                afterState: created as Prisma.InputJsonValue,
+            },
+        });
+
+        return created;
     });
 
     return location as unknown as Record<string, unknown>;
 };
 
 export const updateLocation = async (
+    actor: RequestActor,
     locationId: string,
     payload: {
         name?: string | undefined;
@@ -80,26 +118,90 @@ export const updateLocation = async (
         timezone?: string | undefined;
     },
 ): Promise<Record<string, unknown>> => {
-    const existing = await prismaClient.location.findUnique({
-        where: { id: locationId },
-        select: { id: true },
-    });
-
-    if (!existing) {
-        throw new NotFoundError('Location not found', { locationId });
-    }
-
-    const updatedLocation = await prismaClient.location.update({
-        where: { id: locationId },
-        data: {
-            ...(payload.name !== undefined ? { name: payload.name } : {}),
-            ...(payload.address !== undefined ? { address: payload.address } : {}),
-            ...(payload.timezone !== undefined ? { timezone: payload.timezone } : {}),
+    const existing = await prismaClient.location.findFirst({
+        where: {
+            id: locationId,
+            isActive: true,
+            deletedAt: null,
         },
         select: locationSelect,
     });
 
+    if (!existing) {
+        throw new NotFoundError('Center not found', { locationId });
+    }
+
+    const updatedLocation = await prismaClient.$transaction(async (tx) => {
+        const updated = await tx.location.update({
+            where: { id: locationId },
+            data: {
+                ...(payload.name !== undefined ? { name: payload.name } : {}),
+                ...(payload.address !== undefined ? { address: payload.address } : {}),
+                ...(payload.timezone !== undefined ? { timezone: payload.timezone } : {}),
+            },
+            select: locationSelect,
+        });
+
+        await tx.auditLog.create({
+            data: {
+                userId: actor.id,
+                action: 'UPDATE',
+                entityType: 'LOCATION',
+                entityId: locationId,
+                beforeState: existing as Prisma.InputJsonValue,
+                afterState: updated as Prisma.InputJsonValue,
+            },
+        });
+
+        return updated;
+    });
+
     return updatedLocation as unknown as Record<string, unknown>;
+};
+
+export const deactivateLocation = async (
+    actor: RequestActor,
+    locationId: string,
+): Promise<Record<string, unknown>> => {
+    const existing = await prismaClient.location.findFirst({
+        where: {
+            id: locationId,
+            isActive: true,
+            deletedAt: null,
+        },
+        select: locationSelect,
+    });
+
+    if (!existing) {
+        throw new NotFoundError('Center not found', { locationId });
+    }
+
+    const deletedAt = new Date();
+    const deactivated = await prismaClient.$transaction(async (tx) => {
+        const updated = await tx.location.update({
+            where: { id: locationId },
+            data: {
+                isActive: false,
+                deletedAt,
+            },
+            select: locationSelect,
+        });
+
+        await tx.auditLog.create({
+            data: {
+                userId: actor.id,
+                action: 'DELETE',
+                entityType: 'LOCATION',
+                entityId: locationId,
+                beforeState: existing as Prisma.InputJsonValue,
+                afterState: updated as Prisma.InputJsonValue,
+            },
+        });
+
+        return updated;
+    });
+
+    return deactivated as unknown as Record<string, unknown>;
 };
 
 export const assignManager = async (
@@ -107,18 +209,26 @@ export const assignManager = async (
     managerUserId: string,
 ): Promise<Record<string, unknown>> => {
     const [location, user] = await prismaClient.$transaction([
-        prismaClient.location.findUnique({
-            where: { id: locationId },
+        prismaClient.location.findFirst({
+            where: {
+                id: locationId,
+                isActive: true,
+                deletedAt: null,
+            },
             select: { id: true },
         }),
-        prismaClient.user.findUnique({
-            where: { id: managerUserId },
+        prismaClient.user.findFirst({
+            where: {
+                id: managerUserId,
+                isActive: true,
+                deletedAt: null,
+            },
             select: { id: true, role: true },
         }),
     ]);
 
     if (!location) {
-        throw new NotFoundError('Location not found', { locationId });
+        throw new NotFoundError('Center not found', { locationId });
     }
 
     if (!user) {
@@ -126,7 +236,7 @@ export const assignManager = async (
     }
 
     if (user.role !== 'MANAGER') {
-        throw new ValidationError('Only users with MANAGER role can be assigned to a location');
+        throw new ValidationError('Only users with MANAGER role can be assigned to a center');
     }
 
     const existingLink = await prismaClient.locationManager.findUnique({
@@ -140,7 +250,7 @@ export const assignManager = async (
     });
 
     if (existingLink) {
-        throw new ConflictError('Manager is already assigned to this location', {
+        throw new ConflictError('Manager is already assigned to this center', {
             locationId,
             managerUserId,
         });

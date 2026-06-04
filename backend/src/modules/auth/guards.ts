@@ -31,9 +31,14 @@ export const verifyLocationAccess = (locationIdParamKey: string = 'locationId') 
                             userId: request.user.id,
                         },
                     },
+                    include: {
+                        location: {
+                            select: { isActive: true, deletedAt: true },
+                        },
+                    },
                 });
 
-                if (!isAssigned) {
+                if (!isAssigned || !isAssigned.location.isActive || isAssigned.location.deletedAt) {
                     next(new ForbiddenError('You do not have access to this location'));
                     return;
                 }
@@ -62,10 +67,14 @@ const enforceManagerLocation = async (
                 userId: managerId,
             },
         },
-        select: { id: true },
+        include: {
+            location: {
+                select: { isActive: true, deletedAt: true },
+            },
+        },
     });
 
-    if (!isAssigned) {
+    if (!isAssigned || !isAssigned.location.isActive || isAssigned.location.deletedAt) {
         throw new ForbiddenError('You do not have access to this location', { locationId });
     }
 };
@@ -81,13 +90,14 @@ const enforceStaffCertification = async (
                 locationId,
             },
         },
-        select: {
-            id: true,
-            revokedAt: true,
+        include: {
+            location: {
+                select: { isActive: true, deletedAt: true },
+            },
         },
     });
 
-    if (!certification || certification.revokedAt) {
+    if (!certification || certification.revokedAt || !certification.location.isActive || certification.location.deletedAt) {
         throw new ForbiddenError('You do not have access to this location', { locationId });
     }
 };

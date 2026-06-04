@@ -26,7 +26,12 @@ export type UserRecord = {
     lastName: string
     role: AppRole
     phone?: string | null
+    isActive?: boolean
+    deletedAt?: string | null
     certifications?: UserCertification[]
+    managerLocations?: Array<{
+        location?: UserLocation
+    }>
     skills?: UserSkill[]
 }
 
@@ -55,6 +60,8 @@ export type UserDetailResponse = {
         lastName: string
         role: AppRole
         phone?: string | null
+        isActive?: boolean
+        deletedAt?: string | null
         certifications?: Array<{
             id: string
             locationId: string
@@ -75,6 +82,17 @@ export type UpdateUserPayload = {
     lastName?: string
     phone?: string | null
     role?: AppRole
+    locationIds?: string[]
+}
+
+export type CreateUserPayload = {
+    email: string
+    password: string
+    firstName: string
+    lastName: string
+    role: AppRole
+    phone?: string
+    locationIds?: string[]
 }
 
 export const userService = {
@@ -86,11 +104,17 @@ export const userService = {
     getUserById(userId: string) {
         return apiClient.get<UserDetailResponse>(`/users/${userId}`)
     },
+    createUser(payload: CreateUserPayload) {
+        return apiClient.post<UserDetailResponse, CreateUserPayload>('/users', payload)
+    },
     updateUser(userId: string, payload: UpdateUserPayload) {
         return apiClient.put<UserDetailResponse['data'], UpdateUserPayload>(
             `/users/${userId}`,
             payload,
         )
+    },
+    deactivateUser(userId: string) {
+        return apiClient.del<UserDetailResponse>(`/users/${userId}`)
     },
     addCertification(userId: string, locationId: string) {
         return apiClient.post<{ data: UserCertification }, { locationId: string }>(

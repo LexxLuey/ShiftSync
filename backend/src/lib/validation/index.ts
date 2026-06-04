@@ -33,6 +33,16 @@ export const registerSchema = z.object({
     phone: z.string().min(3).optional(),
 });
 
+export const createUserSchema = z.object({
+    email: z.email().transform((value) => value.trim().toLowerCase()),
+    password: z.string().min(8),
+    firstName: z.string().min(1),
+    lastName: z.string().min(1),
+    role: roleEnum,
+    phone: z.string().min(3).optional(),
+    locationIds: z.array(z.uuid()).default([]),
+});
+
 export const loginSchema = z.object({
     email: z.email().transform((value) => value.trim().toLowerCase()),
     password: z.string().min(8),
@@ -44,6 +54,7 @@ export const updateUserSchema = z
         lastName: z.string().min(1).optional(),
         phone: z.string().min(3).nullable().optional(),
         role: roleEnum.optional(),
+        locationIds: z.array(z.uuid()).optional(),
     })
     .refine((value) => Object.keys(value).length > 0, {
         message: 'At least one field is required',

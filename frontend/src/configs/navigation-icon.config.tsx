@@ -5,6 +5,13 @@ import {
     PiBookBookmarkDuotone,
     PiAcornDuotone,
     PiBagSimpleDuotone,
+    PiBuildingsDuotone,
+    PiCalendarDuotone,
+    PiChartBarDuotone,
+    PiClockDuotone,
+    PiFileTextDuotone,
+    PiUsersThreeDuotone,
+    PiArrowsClockwiseDuotone,
 } from 'react-icons/pi'
 import type { JSX } from 'react'
 
@@ -17,6 +24,13 @@ const navigationIcon: NavigationIcons = {
     groupSingleMenu: <PiBookOpenUserDuotone />,
     groupCollapseMenu: <PiBookBookmarkDuotone />,
     groupMenu: <PiBagSimpleDuotone />,
+    calendar: <PiCalendarDuotone />,
+    chartBar: <PiChartBarDuotone />,
+    clock: <PiClockDuotone />,
+    documentText: <PiFileTextDuotone />,
+    userGroup: <PiUsersThreeDuotone />,
+    switchHorizontal: <PiArrowsClockwiseDuotone />,
+    building: <PiBuildingsDuotone />,
 }
 
 export default navigationIcon

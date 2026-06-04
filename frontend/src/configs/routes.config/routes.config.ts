@@ -4,6 +4,14 @@ import type { Routes } from '@/@types/routes'
 export const protectedRoutes: Routes = {
     '/home': {
         key: 'home',
+        authority: ['ADMIN', 'MANAGER', 'STAFF'],
+        meta: {
+            pageBackgroundType: 'plain',
+            pageContainerType: 'contained',
+        },
+    },
+    '/centers': {
+        key: 'centers',
         authority: ['ADMIN'],
         meta: {
             pageBackgroundType: 'plain',
@@ -59,7 +67,7 @@ export const protectedRoutes: Routes = {
         },
     },
     '/staff': {
-        key: 'staff',
+        key: 'users',
         authority: ['ADMIN', 'MANAGER'],
         meta: {
             pageBackgroundType: 'plain',
