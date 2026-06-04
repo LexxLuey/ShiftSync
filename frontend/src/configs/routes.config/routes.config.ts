@@ -20,7 +20,7 @@ export const protectedRoutes: Routes = {
     },
     '/skills': {
         key: 'skills',
-        authority: ['ADMIN'],
+        authority: ['ADMIN','MANAGER'],
         meta: {
             pageBackgroundType: 'plain',
             pageContainerType: 'contained',

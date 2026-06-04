@@ -40,7 +40,7 @@ const navigationConfig: NavigationTree[] = [
         translateKey: 'nav.skills',
         icon: 'documentText',
         type: NAV_ITEM_TYPE_ITEM,
-        authority: ['ADMIN'],
+        authority: ['ADMIN','MANAGER'],
         subMenu: [],
     },
     {
